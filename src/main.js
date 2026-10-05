@@ -234,6 +234,8 @@ app.on('window-all-closed', () => { if (!presentation) app.quit(); });
 
 app.whenReady().then(() => {
   if (app.isPackaged) app.setAsDefaultProtocolClient('deckstage');
+  // 开发模式没有打包图标，手动设置 dock 图标
+  if (!app.isPackaged && app.dock) app.dock.setIcon(path.join(__dirname, '..', 'build', 'icon.png'));
   installDownloadHandler();
   rebuildMenu();
   showLibrary();

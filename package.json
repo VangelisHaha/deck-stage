@@ -6,13 +6,15 @@
   "main": "src/main.js",
   "private": true,
   "author": "VangelisHaha",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --mac dir",
-    "install-app": "bash scripts/install-app.sh"
+    "install-app": "bash scripts/install-app.sh",
+    "icons": "node scripts/gen-icons.js"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "electron": "^39.0.0",
     "electron-builder": "^26.0.0"
   },
@@ -55,5 +57,20 @@
   },
   "dependencies": {
     "qrcode": "^1.5.4"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VangelisHaha/deck-stage.git"
+  },
+  "homepage": "https://github.com/VangelisHaha/deck-stage",
+  "keywords": [
+    "presentation",
+    "slides",
+    "html",
+    "electron",
+    "agent",
+    "claude-code",
+    "speaker-view",
+    "remote-control"
+  ]
 }

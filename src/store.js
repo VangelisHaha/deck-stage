@@ -5,8 +5,8 @@ const path = require('path');
 const { app } = require('electron');
 const { expandHome, isDir } = require('./util');
 
-// 首次启动时预置的稿库目录，不存在的会被过滤掉
-const SEED_ROOTS = ['~/Documents/book/02-项目总结/平台基建/妮蔻/团队分享'];
+// 首次启动时预置的稿库目录（不存在的会被过滤掉）。默认为空，由用户在稿库里添加。
+const SEED_ROOTS = [];
 
 const EMPTY = { roots: [], recent: [], skillAgents: [], hotReload: false };
 

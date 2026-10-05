@@ -1,31 +1,70 @@
+<p align="center"><img src="assets/icon/icon-512.png" width="128" alt="DeckStage"></p>
+
 # DeckStage
 
-HTML 演示稿的 Mac 放映壳。把 [deck-html](skills/deck-html) 生成的稿子放进一个没有浏览器痕迹的应用里放映：
+**让 Agent 写演示稿，让放映像发布会。**
 
-- 没有地址栏、标签页、工具条，鼠标 2 秒不动自动隐藏
-- 观众窗口和演讲者窗口分开，插上 HDMI 自动把观众窗口全屏到外接屏
-- 单屏开会用「窗口模式」，飞书里共享这个窗口，演讲者窗口不会被看到
-- 内置静态服务，所有响应 `no-store`，不再有浏览器缓存问题
-- 放映期间阻止 Mac 息屏
-- 稿库：登记几个目录，自动扫描里面的稿子
-- 手机遥控：手机浏览器扫码就能翻页、看台词，不用装 App
+DeckStage 是一个 macOS 放映应用，配一个给 Agent 用的 skill。Agent 用 HTML 写演示稿，DeckStage 负责把它放出来：无浏览器痕迹、双屏、演讲者视图、手机遥控、投屏友好。
 
-新建和修改稿子不在这个应用里做，由 Agent 用配套的 `deck-html` skill 完成。
+## 为什么不用 PPT
+
+让 Agent 做 `.pptx`，常见的体验是这样的：
+
+| | 传统 PPT（让 Agent 生成 .pptx） | HTML 稿 + DeckStage |
+|---|---|---|
+| Agent 怎么写 | 通过 python-pptx、PptxGenJS 之类的库，逐个元素指定坐标、宽高、字号、颜色 | 直接写 HTML/CSS，排版交给 flex/grid，不用算坐标 |
+| 一页的代码量 | 排版靠像素坐标，一页常是几十上百行布局代码，改一处间距要重算一片 | 一页就是一个 `<section>`，改哪里动哪里 |
+| 看得见效果吗 | 要先渲染成图片才知道好不好看，来回迭代，每轮都花 token | 浏览器所见即所得，改完刷新即可，还有体检脚本挡掉常见错误 |
+| 样式表达力 | 渐变、阴影、复杂卡片布局、图表、SVG、Canvas 要么做不了，要么很笨 | 浏览器能做的都能做，CSS 动画、SVG、Canvas、任何前端库 |
+| 动画 | 几乎没法声明，Agent 基本写不出像样的 | 就是 CSS/JS，没有上限。框架还内置了阶梯入场、缩放、左滑 |
+| 版本管理 | 二进制文件，diff 看不了 | 纯文本，`git diff` 一眼看懂改了哪一页 |
+| 依赖 | 需要 PowerPoint / Keynote / WPS，字体和版式在不同软件里可能漂移 | 任何有浏览器的设备都能打开，不依赖办公软件 |
+
+我们没有做过严格的 token 基准测试，上面是两种做法在原理上的差异：HTML 是 Agent 最熟悉的语言，表达力强，反馈回路短，所以更省事、更好看。
+
+稿子最后仍然可以导出成 `.pptx`（逐页截图铺进 16:9，版式完全一致，代价是文字不可编辑），需要交付给别人时用。
+
+## 为什么还要一个壳
+
+HTML 稿直接用浏览器放映有几个很烦的问题，DeckStage 就是解决它们的：
+
+- 浏览器有缓存，改了稿子看不到
+- 地址栏、标签页这些多余信息会被一起投出去
+- 浏览器全屏和演讲者视图冲突，接 HDMI 投屏、飞书共享屏幕时经常出问题
+
+## 特性
+
+- **无浏览器痕迹**：没有地址栏、标签页、工具条，鼠标 2 秒不动自动隐藏
+- **双窗口**：观众窗口和演讲者窗口分开，翻页自动同步；演讲者窗口有台词、计时、缩略图
+- **投屏**：插上 HDMI 自动把观众窗口全屏到外接屏；单屏开会用窗口模式，在飞书里共享这个窗口，演讲者窗口不会被拍到
+- **手机遥控**：手机浏览器扫码，就能翻页、看台词、跳页、黑屏，不用装 App
+- **稿库**：登记几个目录，自动扫描里面的稿子，选中回车就放
+- **不会缓存**：内置静态服务，所有响应都带 `no-store`
+- **放映期间不息屏**
+- **Agent 友好**：配套 skill 随应用打包，复制一段提示词给 Agent 就能装好；Agent 用 `deckstage://` 链接和应用互动
 
 ## 安装
 
+目前需要从源码构建（macOS，Node 22+）：
+
 ```bash
+git clone https://github.com/VangelisHaha/deck-stage.git
+cd deck-stage
 npm install
 npm run install-app     # 打包并安装到 /Applications/DeckStage.app
 ```
 
-开发时直接 `npm start`（可带稿子目录：`npm start -- /path/to/deck`）。当前只打包 x64，不签名。
+开发时 `npm start`，可以带稿子目录：`npm start -- /path/to/deck`。当前只打包 x64，不签名。
 
-## 使用
+## 快速开始
 
-1. 打开 DeckStage，左侧「添加稿库目录」登记放稿子的文件夹
-2. 选一份稿子，回车或点「开始放映」
-3. 放映中的快捷键：
+1. 打开 DeckStage，左下角点「新建 / 编辑 → 安装 skill」，复制安装提示词，粘贴给你的 Agent（Claude Code、Codex 等都行）
+2. 对 Agent 说「做一份关于 xxx 的演示稿」，让它把稿子建在已登记的稿库目录里
+3. 回到 DeckStage 选中稿子，回车放映
+
+## 放映
+
+放映中的快捷键：
 
 | 键 | 作用 |
 |---|---|
@@ -74,17 +113,15 @@ npm run install-app     # 打包并安装到 /Applications/DeckStage.app
 
 目录里有 `index.html`，并且有 `deck.config.js` 或 `notes.js`，就算一份稿子。扫描深度最多 4 层。选稿子目录或它的上一层（里面有 `slides/`）都行。
 
-## 新建与编辑：安装 skill
+## 新建与编辑：Agent 和 skill
 
-稿库左下角「新建 / 编辑 → 安装 skill」会显示 skills 目录和一段「安装提示词」。把提示词复制给任意 Agent，它会：
+DeckStage 不编辑稿子，新建和修改都由 Agent 用配套的 [deck-html](skills/deck-html) skill 完成。稿库左下角会显示 skills 目录和一段「安装提示词」，复制给任意 Agent，它会：
 
 1. 把 `deck-html` 装进自己的 skills 目录
 2. 以后用它新建、修改稿子，放进已登记的稿库目录
 3. 改完体检，再用 `deckstage://` 链接通知 DeckStage
 
-skill 源码在 [skills/deck-html](skills/deck-html)，随应用一起打包。
-
-## Agent 互动协议
+### Agent 互动协议
 
 Agent 通过 macOS 的 `open` 命令和 DeckStage 对话。路径需 URL 编码。
 
@@ -96,6 +133,26 @@ Agent 通过 macOS 的 `open` 命令和 DeckStage 对话。路径需 URL 编码�
 | `deckstage://skill-installed?agent=<名字>` | 回报 skill 已安装，稿库里会显示「已安装 · 名字」 |
 
 配置文件在 `~/Library/Application Support/DeckStage/config.json`，`roots` 数组就是稿库目录，也可以直接改。
+
+## 状态与已知限制
+
+这是早期版本。
+
+- 只在 macOS 13（Intel）上测试过。Apple Silicon 和更新的系统理论上可用，没验证
+- Windows 适配在规划中：全屏、菜单、协议注册、字体、打包都要改
+- 手机遥控只在浏览器模拟的手机视口里验证过，没在真机上测过；iOS Safari、Android Chrome 是目标
+- Android App 壳目前只有脚手架（`mobile/`），音量键、连接页都还没做
+- iOS 原生 App 暂时做不了：Capacitor 8 要求 Xcode 26，需要较新的 macOS
+- 导出的 PPTX 是截图式的，文字不可编辑
+
+## 路线
+
+- [x] 稿库、双窗口、投屏切换、快捷键、skill 联动
+- [x] 手机网页遥控（局域网，扫码 / 配对码）
+- [ ] Android App 壳（Capacitor，音量键翻页，锁屏可用）
+- [ ] Windows 适配
+- [ ] iOS App 壳
+- [ ] 预编译安装包（Releases）
 
 ## 目录结构
 
@@ -110,15 +167,20 @@ src/remote/          手机遥控网页
 src/skill.js         skill 位置与安装提示词
 src/util.js          公共工具
 src/menu.js          菜单栏
-src/deck-preload.js  注入放映窗口：隐藏工具条、光标自隐、黑屏
+src/deck-preload.js  注入放映窗口：隐藏工具条、光标自隐、黑屏、结束放映按钮
 src/renderer/        稿库界面
-skills/deck-html/    配套 skill
+skills/deck-html/    配套 skill（稿子框架、模板、体检脚本）
+mobile/              手机 App 壳（Capacitor，Android 脚手架）
+scripts/             安装脚本、图标生成
+assets/icon/         图标矢量母版与各尺寸
 ```
 
-## 路线
+图标由 `scripts/gen-icons.js` 生成，改完几何参数运行 `npm run icons` 即可重新生成全部尺寸。
 
-- [x] 稿库、双窗口、投屏切换、快捷键、skill 联动
-- [x] 手机网页遥控（局域网，扫码 / 配对码）
-- [ ] Android App 壳（Capacitor，音量键翻页，锁屏可用）
-- [ ] iOS App 壳（前台音量键）
-- [ ] Windows 适配
+## 许可证
+
+代码使用 [MIT](LICENSE) 许可证。
+
+名称「DeckStage」和 `assets/icon/` 下的图标不随 MIT 授权：欢迎 fork 和修改代码，但分发修改版时请换一个名字和图标，避免和本项目混淆。
+
+`skills/deck-html` 里随附的 [html2canvas](https://github.com/niklasvh/html2canvas) 和 [PptxGenJS](https://github.com/gitbrent/PptxGenJS) 均为 MIT 许可证。应用基于 [Electron](https://www.electronjs.org/)，手机壳基于 [Capacitor](https://capacitorjs.com/)，二维码使用 [qrcode](https://github.com/soldair/node-qrcode)。
