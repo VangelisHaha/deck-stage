@@ -265,6 +265,7 @@ ipcMain.on('stage:pointer', (e, msg) => {
 });
 // 演讲者窗口里正在搜索框打字：放映快捷键（F/D/B/P）先让位
 ipcMain.on('stage:typing', (e, on) => { if (fromPresenter(e)) presentation.typing = !!on; });
+ipcMain.on('stage:overlay', (e, on) => { if (fromPresenter(e)) presentation.overlay = !!on; });
 // 演讲者视图的布局偏好（布局档、分栏比例、台词字号）
 ipcMain.on('stage:prefs-get', (e) => { e.returnValue = store.read().presenter || {}; });
 ipcMain.on('stage:prefs-set', (e, p) => {

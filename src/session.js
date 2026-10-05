@@ -33,6 +33,8 @@ class Presentation {
     this.displayTimer = null;
     this.lastApply = 0;
     this.lastEsc = 0;
+    this.typing = false;  // 演讲者窗口开着目录：放映快捷键让位
+    this.overlay = false; // 目录或操作指引开着：Esc 先关它们
     // 遥控端要用的稿子信息：每页标题、台词、建议用时，以及当前页和计时起点
     this.title = readDeckTitle(root);
     this.slides = [];
@@ -51,7 +53,7 @@ class Presentation {
     this.audience = this.makeWindow('audience', `${this.server.origin}/index.html`);
     this.presenter = this.makeWindow('presenter', `${this.server.origin}/index.html?notes=1`);
     this.audience.on('closed', () => this.end());
-    this.presenter.on('closed', () => { this.presenter = null; this.typing = false; this.onChange(); });
+    this.presenter.on('closed', () => { this.presenter = null; this.typing = false; this.overlay = false; this.onChange(); });
 
     this.applyTarget(this.target, { manual: false });
     this.audience.once('ready-to-show', () => this.audience.show());
@@ -86,7 +88,7 @@ class Presentation {
     wc.on('will-navigate', (e, u) => {
       if (new URL(u).origin !== this.server.origin) e.preventDefault();
     });
-    wc.on('before-input-event', (e, input) => this.onKey(e, input));
+    wc.on('before-input-event', (e, input) => this.onKey(e, input, kind));
     wc.on('did-finish-load', () => this.loadDeckInfo());
     wc.on('did-navigate-in-page', () => this.syncCur());
     win.loadURL(url);
@@ -96,7 +98,7 @@ class Presentation {
   reopenPresenter() {
     if (this.presenter) return this.presenter.focus();
     this.presenter = this.makeWindow('presenter', `${this.server.origin}/index.html?notes=1`);
-    this.presenter.on('closed', () => { this.presenter = null; this.typing = false; this.onChange(); });
+    this.presenter.on('closed', () => { this.presenter = null; this.typing = false; this.overlay = false; this.onChange(); });
     this.placePresenter();
     this.presenter.once('ready-to-show', () => { this.presenter.show(); this.presenter.focus(); });
     this.onChange();
@@ -242,9 +244,15 @@ class Presentation {
 
   // ---------- 快捷键 ----------
 
-  onKey(e, input) {
+  onKey(e, input, kind) {
     if (input.type !== 'keyDown' || input.meta || input.control || input.alt) return;
     if (this.typing && input.key.toLowerCase() !== 'escape') return;
+    // 演讲者窗口里开着目录 / 操作指引时，Esc 先收起它们，不动投屏也不结束放映
+    if (kind === 'presenter' && this.overlay && input.key === 'Escape') {
+      e.preventDefault();
+      this.presenter.webContents.send('stage:close-overlay');
+      return;
+    }
     switch (input.key.toLowerCase()) {
       case 'f': e.preventDefault(); this.toggleFullscreen(); break;
       case 'd': e.preventDefault(); this.nextDisplay(); break;

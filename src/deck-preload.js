@@ -336,7 +336,7 @@ function initPresenter(styleEl) {
   const setHint = () => {
     hint.textContent = '';
     hint.classList.toggle('toc', tocOpen);
-    if (tocOpen) { hint.textContent = '目录已打开，F / D / B / P 等快捷键已暂停：输入页码、标题或拼音首字母筛选，↑↓ 选择，回车跳转，G 收起'; return; }
+    if (tocOpen) { hint.textContent = '目录已打开，F / D / B / P 等快捷键已暂停：输入页码、标题或拼音首字母筛选，↑↓ 选择，回车跳转，Esc 收起'; return; }
     HINT_IDLE.forEach(([k, t], i) => {
       if (i) hint.append(' · ');
       const b = el('b'); b.textContent = k;
@@ -345,7 +345,7 @@ function initPresenter(styleEl) {
   };
   const HELP = [
     ['放映（观众屏幕）', [['F', '观众窗口 全屏 / 窗口模式'], ['D', '观众窗口换到下一块屏幕'], ['B', '黑屏，再按恢复'], ['P', '回到演讲者窗口'], ['← →  空格', '翻页'], ['Esc', '退出全屏；窗口模式连按两次结束放映']]],
-    ['演讲者窗口', [['G', '目录（搜页码 / 标题 / 拼音首字母）'], ['数字 + 回车', '直接跳到第几页'], ['L', '切换布局：均衡 / 画面优先 / 台词优先'], ['+  -', '台词字号'], ['鼠标移入当前页', '观众屏幕出现手形指针'], ['Shift + 拖动', '在观众屏幕上划线'], ['E', '画笔常开 / 关闭'], ['C', '清除笔迹（翻页也会清）'], ['?', '打开 / 关闭本说明']]]
+    ['演讲者窗口', [['G', '打开目录（搜页码 / 标题 / 拼音首字母）；Esc 收起'], ['数字 + 回车', '直接跳到第几页'], ['L', '切换布局：均衡 / 画面优先 / 台词优先'], ['+  -', '台词字号'], ['鼠标移入当前页', '观众屏幕出现手形指针'], ['Shift + 拖动', '在观众屏幕上划线'], ['E', '画笔常开 / 关闭'], ['C', '清除笔迹（翻页也会清）'], ['?', '打开本说明；Esc 或 ✕ 关闭']]]
   ];
   const buildHelp = () => {
     const hd = el('div', null, 'hd');
@@ -364,7 +364,11 @@ function initPresenter(styleEl) {
   function toggleHelp(force) {
     const on = force == null ? !help.classList.contains('on') : !!force;
     help.classList.toggle('on', on);
+    syncOverlay();
   }
+  function syncOverlay() { ipcRenderer.send('stage:overlay', tocOpen || help.classList.contains('on')); }
+  // 主进程转来的 Esc：先关操作指引，再关目录
+  ipcRenderer.on('stage:close-overlay', () => { if (help.classList.contains('on')) toggleHelp(false); else if (tocOpen) toggleToc(false); });
   buildHelp();
 
   function cycleLayout() {
@@ -422,7 +426,7 @@ function initPresenter(styleEl) {
     tocList.textContent = '';
     const hd = el('div', null, 'hd');
     const hint = el('span');
-    hint.textContent = '目录 · 回车跳转 · G 收起';
+    hint.textContent = '目录 · 回车跳转 · Esc 收起';
     const close = el('button');
     close.type = 'button';
     close.textContent = '✕';
@@ -477,7 +481,8 @@ function initPresenter(styleEl) {
     toc.classList.toggle('on', tocOpen);
     tocBtn.classList.toggle('on', tocOpen);
     ipcRenderer.send('stage:typing', tocOpen);
-    setHint(); // 目录开着期间，放映快捷键（F/D/B/P）全部让位
+    setHint();
+    syncOverlay(); // 目录开着期间，放映快捷键（F/D/B/P）全部让位
     if (tocOpen) {
       tocQuery = ''; tocInput.value = '';
       tocSel = Math.max(0, curIndex());

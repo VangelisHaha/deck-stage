@@ -1,7 +1,7 @@
 {
   "name": "deck-stage",
   "productName": "DeckStage",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "HTML 演示稿放映壳：无浏览器痕迹、双屏、演讲者视图、投屏友好",
   "main": "src/main.js",
   "private": true,
