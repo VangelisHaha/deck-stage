@@ -177,6 +177,18 @@ const PV_CSS = `
 #ps-bar button { height: 28px; padding: 0 11px; border: 1px solid var(--line2, #333); background: transparent; color: var(--ink3, #aaa); font: 12px "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .04em; cursor: pointer; white-space: nowrap; }
 #ps-bar button:hover { color: var(--ink, #eee); border-color: var(--ink3, #aaa); }
 #ps-bar button.on { color: #121212; background: #FF4F1F; border-color: #FF4F1F; }
+#ps-hint { flex: none; padding: 0 8px 10px 14px; font: 12px/1.7 "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .03em; color: var(--ink4, #888); }
+#ps-hint b { color: var(--ink2, #ccc); font-weight: 600; }
+#ps-hint.toc { color: #FF4F1F; }
+#ps-help { position: absolute; z-index: 130; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(560px, 92%); max-height: 92%; overflow-y: auto; display: none; background: #0F0F0E; border: 1px solid var(--line2, #333); box-shadow: 0 12px 40px rgba(0,0,0,.6); }
+#ps-help.on { display: block; }
+#ps-help .hd { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line2, #333); font: 12px "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .08em; color: var(--ink3, #aaa); }
+#ps-help .hd button { border: 0; background: transparent; color: var(--ink3, #aaa); font-size: 13px; cursor: pointer; }
+#ps-help h4 { margin: 12px 14px 4px; font: 11px "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .1em; color: #FF4F1F; }
+#ps-help dl { margin: 0; padding: 0 14px 8px; display: grid; grid-template-columns: 150px 1fr; row-gap: 5px; }
+#ps-help dt { font: 12px "SF Mono", ui-monospace, Menlo, monospace; color: var(--ink, #eee); }
+#ps-help dd { margin: 0; font-size: 13px; color: var(--ink3, #aaa); }
+#ps-toc .tip { flex: none; margin: -2px 10px 8px; font: 11px/1.6 "SF Mono", ui-monospace, Menlo, monospace; color: var(--ink4, #888); }
 #ps-bar kbd { opacity: .55; margin-left: 5px; font: inherit; }
 #ps-bar .sp { flex: 1; }
 #ps-hud { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 120; padding: 6px 14px; background: rgba(18,18,18,.92); border: 1px solid #FF4F1F; color: #F1EEE6; font: 13px "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .06em; opacity: 0; pointer-events: none; transition: opacity .15s; }
@@ -238,6 +250,8 @@ function initPresenter(styleEl) {
   const hud = el('div', 'ps-hud');
   const toc = el('div', 'ps-toc');
   const bar = el('div', 'ps-bar');
+  const hint = el('div', 'ps-hint');
+  const help = el('div', 'ps-help');
   const splitter = el('div', 'ps-split');
   const right = el('div', 'ps-right');
   const next = el('div', 'ps-next');
@@ -254,8 +268,8 @@ function initPresenter(styleEl) {
   const nextNb = mkNb();
   next.append(prevNb.nb, nextNb.nb);
   box.appendChild(inkCanvas);
-  area.append(box, toc, hud);
-  left.append(area, bar);
+  area.append(box, toc, help, hud);
+  left.append(area, bar, hint);
   right.append(body, next);
   main.append(left, splitter, right);
   pv.insertBefore(main, shots);
@@ -314,7 +328,44 @@ function initPresenter(styleEl) {
   const sp = el('div', null, 'sp');
   const fontDn = btn('A-', '-', () => setFont(font - 1));
   const fontUp = btn('A+', '+', () => setFont(font + 1));
-  bar.append(tocBtn, layoutBtn, penBtn, clearBtn, sp, fontDn, fontUp);
+  const helpBtn = btn('帮助', '?', () => toggleHelp());
+  bar.append(tocBtn, layoutBtn, penBtn, clearBtn, helpBtn, sp, fontDn, fontUp);
+
+  // ---- 操作指引：底部常驻一行提示，? 打开完整快捷键表 ----
+  const HINT_IDLE = [['F', '全屏/窗口'], ['D', '换屏'], ['B', '黑屏'], ['P', '回到本窗'], ['G', '目录'], ['?', '全部快捷键']];
+  const setHint = () => {
+    hint.textContent = '';
+    hint.classList.toggle('toc', tocOpen);
+    if (tocOpen) { hint.textContent = '目录已打开，F / D / B / P 等快捷键已暂停：输入页码、标题或拼音首字母筛选，↑↓ 选择，回车跳转，G 收起'; return; }
+    HINT_IDLE.forEach(([k, t], i) => {
+      if (i) hint.append(' · ');
+      const b = el('b'); b.textContent = k;
+      hint.append(b, ' ' + t);
+    });
+  };
+  const HELP = [
+    ['放映（观众屏幕）', [['F', '观众窗口 全屏 / 窗口模式'], ['D', '观众窗口换到下一块屏幕'], ['B', '黑屏，再按恢复'], ['P', '回到演讲者窗口'], ['← →  空格', '翻页'], ['Esc', '退出全屏；窗口模式连按两次结束放映']]],
+    ['演讲者窗口', [['G', '目录（搜页码 / 标题 / 拼音首字母）'], ['数字 + 回车', '直接跳到第几页'], ['L', '切换布局：均衡 / 画面优先 / 台词优先'], ['+  -', '台词字号'], ['鼠标移入当前页', '观众屏幕出现手形指针'], ['Shift + 拖动', '在观众屏幕上划线'], ['E', '画笔常开 / 关闭'], ['C', '清除笔迹（翻页也会清）'], ['?', '打开 / 关闭本说明']]]
+  ];
+  const buildHelp = () => {
+    const hd = el('div', null, 'hd');
+    const t = el('span'); t.textContent = '操作指引';
+    const x = el('button'); x.type = 'button'; x.textContent = '✕';
+    x.addEventListener('click', () => toggleHelp(false));
+    hd.append(t, x);
+    help.append(hd);
+    HELP.forEach(([title, rows]) => {
+      const h = el('h4'); h.textContent = title;
+      const dl = el('dl');
+      rows.forEach(([k, d]) => { const dt = el('dt'); dt.textContent = k; const dd = el('dd'); dd.textContent = d; dl.append(dt, dd); });
+      help.append(h, dl);
+    });
+  };
+  function toggleHelp(force) {
+    const on = force == null ? !help.classList.contains('on') : !!force;
+    help.classList.toggle('on', on);
+  }
+  buildHelp();
 
   function cycleLayout() {
     const i = LAYOUTS.findIndex((l) => l.id === layout);
@@ -387,7 +438,9 @@ function initPresenter(styleEl) {
       li.addEventListener('click', () => goTo(i));
       tocList.appendChild(li);
     });
-    toc.append(hd, tocInput, tocList);
+    const tip = el('div', null, 'tip');
+    tip.textContent = '页码 11 · 标题关键字 · 拼音首字母 fy';
+    toc.append(hd, tocInput, tip, tocList);
     filterToc();
   };
   // 数字按页码前缀匹配（11 → 第 11、110 页），其余按标题包含匹配
@@ -423,7 +476,8 @@ function initPresenter(styleEl) {
     if (tocOpen && tocCount !== slideEls().length) buildToc();
     toc.classList.toggle('on', tocOpen);
     tocBtn.classList.toggle('on', tocOpen);
-    ipcRenderer.send('stage:typing', tocOpen); // 目录开着期间，放映快捷键（F/D/B/P）全部让位
+    ipcRenderer.send('stage:typing', tocOpen);
+    setHint(); // 目录开着期间，放映快捷键（F/D/B/P）全部让位
     if (tocOpen) {
       tocQuery = ''; tocInput.value = '';
       tocSel = Math.max(0, curIndex());
@@ -544,6 +598,7 @@ function initPresenter(styleEl) {
       else if (k === 'Enter') { e.preventDefault(); jumpSel(); tocQuery = ''; tocInput.value = ''; filterToc(); }
       return;
     }
+    if (k === '?') { eat(e); toggleHelp(); return; }
     if (tocOpen && k !== 'g' && e.key.length === 1) { tocInput.focus(); return; } // 目录开着：可打印字符一律进搜索框，不触发任何快捷键
     if (/^[0-9]$/.test(k)) { eat(e); digits = (digits + k).slice(0, 3); showDigits(); return; }
     if (digits && k === 'Enter') {
@@ -568,6 +623,7 @@ function initPresenter(styleEl) {
   }, true);
 
   applyPrefs();
+  setHint();
   buildToc();
   onTick();
 }
