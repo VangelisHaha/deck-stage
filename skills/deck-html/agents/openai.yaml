@@ -1,0 +1,4 @@
+interface:
+  display_name: "HTML 演示稿框架"
+  short_description: "Scaffold, author and lint single-file HTML slide decks with presenter view and PPTX export"
+  default_prompt: "Use $deck-html to scaffold a new slide deck, add or edit slides and speaker notes, or run a deck health check."

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>DeckStage</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'">
+<link rel="stylesheet" href="library.css">
+</head>
+<body>
+<div id="app">
+  <aside id="rail">
+    <div class="brand">DeckStage</div>
+    <div class="brand-sub">放映台 · v0.1</div>
+    <div class="label">LIBRARY</div>
+    <nav id="nav"></nav>
+    <div class="grow"></div>
+    <div class="skill-hint">
+      新建、改稿交给 Agent 的 skill
+      <button id="openSkills" class="link-signal">新建 / 编辑 → 安装 skill</button>
+    </div>
+    <button id="addRoot" class="link-paper">+ 添加稿库目录</button>
+  </aside>
+
+  <main>
+    <header>
+      <h1>稿库</h1>
+      <div id="count" class="mono muted"></div>
+    </header>
+    <div class="search"><input id="q" type="text" placeholder="搜索标题" spellcheck="false"><span class="mono muted">⌘F</span></div>
+    <div id="list"></div>
+    <footer id="bar">
+      <div id="status"></div>
+      <button id="reveal" class="link-paper">在 Finder 中显示</button>
+      <button id="play" class="play">开始放映　⏎</button>
+    </footer>
+  </main>
+</div>
+
+<div id="skills" class="modal" hidden>
+  <div class="sheet">
+    <div class="sheet-head">
+      <div>
+        <h2>新建与编辑</h2>
+        <p class="muted">稿子由 Agent 用 deck-html skill 生成和修改，DeckStage 只负责放映，这里不提供编辑界面。</p>
+      </div>
+      <button id="closeSkills" class="link-ink">关闭 Esc</button>
+    </div>
+    <section>
+      <div class="row-head"><span class="label ink">01 · SKILLS 目录</span>
+        <span><button id="revealSkill" class="link-ink">在 Finder 中显示</button><button id="copyPath" class="link-ink">复制路径</button></span>
+      </div>
+      <div id="skillPath" class="skill-path"></div>
+      <p class="muted small">把整个 deck-html 目录装进你的 Agent 的 skills 目录即可。</p>
+    </section>
+    <section class="grow-col">
+      <div class="row-head"><span class="label ink">02 · 安装提示词</span><button id="copyPrompt" class="play small-btn">复制提示词</button></div>
+      <pre id="prompt"></pre>
+    </section>
+    <div id="agents" class="agents"></div>
+  </div>
+</div>
+
+<script src="library.js"></script>
+</body>
+</html>
