@@ -1,6 +1,7 @@
 'use strict';
 // 注入到观众/演讲者窗口的预加载脚本（沙箱内只能用 electron 的 ipcRenderer）。
-// 只做「去浏览器痕迹」：隐藏稿子工具条、鼠标自动隐藏、黑屏、窗口模式下的拖动条。不改稿子文件。
+// 去浏览器痕迹：隐藏稿子工具条、鼠标自动隐藏、黑屏、窗口模式下的拖动条。
+// 演讲者窗口另加：大画面布局、目录、光点与划线（划线经主进程转给观众窗口）。不改稿子文件，旧稿子同样生效。
 const { ipcRenderer } = require('electron');
 
 const CSS = `
@@ -12,6 +13,7 @@ html.stage-fs #stage-drag { display: none; }
 #stage-black.on { display: block; }
 .stage-end { margin-left: 12px; height: 32px; padding: 0 14px; border: 1px solid #F1EEE6; background: transparent; color: #F1EEE6; font: 12px "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: 1px; cursor: pointer; white-space: nowrap; }
 .stage-end.confirm { background: #FF4F1F; border-color: #FF4F1F; color: #121212; }
+#stage-ink { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 2147482000; pointer-events: none; }
 .stage-end.float { position: fixed; top: 10px; right: 10px; z-index: 2147483000; }
 `;
 const IDLE_MS = 2000;
@@ -34,6 +36,449 @@ function addEndButton() {
   btn.addEventListener('blur', () => { clearTimeout(timer); btn.classList.remove('confirm'); btn.textContent = '结束放映'; });
 }
 
+// ---------- 光点与划线（演讲者窗口画、观众窗口显示；坐标一律是 0–1 的画面比例，两边分辨率不同也对得上）----------
+const INK_COLOR = '#FF4F1F';
+const INK_WAIT = 3000; // 笔迹停留，之后淡出
+const INK_FADE = 600;
+const DOT_TTL = 5000;  // 光点长时间没收到消息就收起，防止对端异常时残留
+
+function makeInk(canvas, getRect) {
+  const ctx = canvas.getContext('2d');
+  const strokes = new Map(); // id → { pts, endAt }
+  let dot = null;
+  let raf = 0;
+
+  function frame(now) {
+    raf = 0;
+    const cr = canvas.getBoundingClientRect();
+    const d = window.devicePixelRatio || 1;
+    const w = Math.round(cr.width * d);
+    const h = Math.round(cr.height * d);
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+    ctx.clearRect(0, 0, cr.width, cr.height);
+    const r = getRect();
+    const at = (p) => [r.left - cr.left + p[0] * r.width, r.top - cr.top + p[1] * r.height];
+    const lw = Math.max(3, r.width * 0.0045);
+    let alive = false;
+
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (const [id, s] of strokes) {
+      let a = 1;
+      if (s.endAt) {
+        const t = now - s.endAt - INK_WAIT;
+        if (t >= INK_FADE) { strokes.delete(id); continue; }
+        if (t > 0) a = 1 - t / INK_FADE;
+      }
+      alive = true;
+      ctx.globalAlpha = a;
+      ctx.strokeStyle = INK_COLOR;
+      ctx.shadowColor = 'rgba(255,79,31,.55)';
+      ctx.shadowBlur = lw * 2;
+      ctx.lineWidth = lw;
+      ctx.beginPath();
+      s.pts.forEach((p, i) => { const [x, y] = at(p); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+      if (s.pts.length === 1) { const [x, y] = at(s.pts[0]); ctx.lineTo(x + 0.01, y); }
+      ctx.stroke();
+    }
+
+    ctx.globalAlpha = 1;
+    if (dot && now - dot.at > DOT_TTL) dot = null;
+    if (dot) {
+      alive = true;
+      const [x, y] = at([dot.x, dot.y]);
+      const rad = Math.max(7, r.width * 0.009);
+      ctx.shadowColor = 'rgba(255,79,31,.8)';
+      ctx.shadowBlur = rad * 1.8;
+      ctx.fillStyle = INK_COLOR;
+      ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = Math.max(2, rad * 0.28);
+      ctx.stroke();
+    }
+    if (alive) raf = requestAnimationFrame(frame);
+  }
+  const kick = () => { if (!raf) raf = requestAnimationFrame(frame); };
+
+  return {
+    pointer(x, y) { dot = x == null ? null : { x, y, at: performance.now() }; kick(); },
+    add(id, pts) {
+      const s = strokes.get(id) || { pts: [], endAt: 0 };
+      s.pts.push(...pts);
+      strokes.set(id, s);
+      kick();
+    },
+    end(id) { const s = strokes.get(id); if (s) s.endAt = performance.now(); kick(); },
+    clear() { strokes.clear(); kick(); },
+    apply(m) {
+      if (m.k === 'm') this.pointer(m.x, m.y);
+      else if (m.k === 'l') this.pointer(null);
+      else if (m.k === 's') this.add(m.id, m.pts);
+      else if (m.k === 'e') this.end(m.id);
+      else if (m.k === 'c') this.clear();
+    }
+  };
+}
+
+function initAudienceInk() {
+  const canvas = document.createElement('canvas');
+  canvas.id = 'stage-ink';
+  document.body.appendChild(canvas);
+  const stage = () => document.getElementById('stage');
+  const ink = makeInk(canvas, () => (stage() || document.documentElement).getBoundingClientRect());
+  ipcRenderer.on('stage:pointer', (_e, m) => ink.apply(m));
+}
+
+// ---------- 演讲者窗口：大画面布局 ----------
+const LAYOUTS = [
+  { id: 'bal', name: '均衡', split: 62, font: 19 },
+  { id: 'stage', name: '画面优先', split: 80, font: 16 },
+  { id: 'notes', name: '台词优先', split: 40, font: 22 }
+];
+const FONT_MIN = 12;
+const FONT_MAX = 40;
+
+const PV_CSS = `
+#pv .pvshots, #pv #pvFold { display: none !important; }
+#ps-main { flex: 1; min-height: 0; display: flex; }
+#ps-left { flex: 0 0 calc(var(--ps-split, 62) * 1%); min-width: 0; display: flex; flex-direction: column; }
+#ps-area { flex: 1; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; padding: 12px 6px 8px 14px; }
+#ps-box { position: relative; flex: none; overflow: hidden; background: var(--bg0, #0F0F0E); border: 1px solid var(--line2, #333); }
+#ps-box #stage { transform: scale(var(--ps-k, .5)) !important; pointer-events: none; }
+#ps-ink { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 90; cursor: crosshair; }
+#ps-ink.pen { cursor: cell; }
+#ps-split { flex: none; width: 7px; cursor: col-resize; position: relative; }
+#ps-split::after { content: ""; position: absolute; left: 3px; top: 0; bottom: 0; width: 1px; background: var(--line2, #333); }
+#ps-split:hover::after, #ps-split.drag::after { width: 3px; left: 2px; background: #FF4F1F; }
+#ps-right { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#ps-right #pvBody { font-size: calc(var(--ps-font, 19) * 1px) !important; }
+#ps-next { flex: none; padding: 8px 16px 12px; border-top: 1px solid var(--line, #222); }
+#pv.lay-stage #ps-next { display: none; }
+#ps-next .cap { font: 11px "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .04em; color: var(--ink4, #888); margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ps-next .box { position: relative; overflow: hidden; width: min(100%, 400px); aspect-ratio: 16 / 9; border: 1px solid var(--line2, #333); background: var(--bg0, #0F0F0E); }
+#ps-next .mini { position: absolute; left: 0; top: 0; width: var(--deck-w, 1600px); height: var(--deck-h, 900px); transform-origin: 0 0; pointer-events: none; }
+#ps-next .mini > .slide { display: flex !important; }
+#ps-next .mini .an { animation: none !important; }
+#ps-bar { flex: none; display: flex; gap: 8px; align-items: center; padding: 6px 6px 10px 14px; flex-wrap: wrap; }
+#ps-bar button { height: 28px; padding: 0 11px; border: 1px solid var(--line2, #333); background: transparent; color: var(--ink3, #aaa); font: 12px "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .04em; cursor: pointer; white-space: nowrap; }
+#ps-bar button:hover { color: var(--ink, #eee); border-color: var(--ink3, #aaa); }
+#ps-bar button.on { color: #121212; background: #FF4F1F; border-color: #FF4F1F; }
+#ps-bar kbd { opacity: .55; margin-left: 5px; font: inherit; }
+#ps-bar .sp { flex: 1; }
+#ps-hud { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 120; padding: 6px 14px; background: rgba(18,18,18,.92); border: 1px solid #FF4F1F; color: #F1EEE6; font: 13px "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .06em; opacity: 0; pointer-events: none; transition: opacity .15s; }
+#ps-hud.on { opacity: 1; }
+#ps-toc { position: absolute; z-index: 110; left: 14px; top: 12px; bottom: 8px; width: min(300px, 70%); display: none; flex-direction: column; background: #0F0F0E; border: 1px solid var(--line2, #333); box-shadow: 0 8px 28px rgba(0,0,0,.5); }
+#ps-toc.on { display: flex; }
+#ps-toc .hd { flex: none; padding: 9px 12px; border-bottom: 1px solid var(--line2, #333); font: 11px "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .08em; color: var(--ink4, #888); }
+#ps-toc ol { flex: 1; margin: 0; padding: 4px 0; list-style: none; overflow-y: auto; }
+#ps-toc li { display: flex; gap: 10px; padding: 7px 12px; cursor: pointer; font-size: 14px; line-height: 1.4; color: var(--ink2, #ccc); border-left: 3px solid transparent; }
+#ps-toc li i { flex: none; width: 24px; font: normal 12px "SF Mono", ui-monospace, Menlo, monospace; color: var(--ink4, #888); padding-top: 1px; }
+#ps-toc li:hover, #ps-toc li.sel { background: rgba(255,255,255,.06); }
+#ps-toc li.now { border-left-color: #FF4F1F; color: var(--ink, #fff); }
+#ps-toc li.now i { color: #FF4F1F; }
+`;
+
+function initPresenter(styleEl) {
+  styleEl.textContent += PV_CSS;
+  const pv = document.getElementById('pv');
+  const body = document.getElementById('pvBody');
+  const shots = document.getElementById('pvShots');
+  if (!pv || !body || !shots) return; // 不是 deck-html 骨架就保持原样
+
+  const cssNum = (name, dflt) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || dflt;
+  const prefs = Object.assign({ layout: 'bal' }, ipcRenderer.sendSync('stage:prefs-get') || {});
+  const base = LAYOUTS.find((l) => l.id === prefs.layout) || LAYOUTS[0];
+  let split = prefs.split || base.split;
+  let font = prefs.font || base.font;
+  let layout = LAYOUTS.some((l) => l.id === prefs.layout) ? prefs.layout : 'custom';
+  const save = () => ipcRenderer.send('stage:prefs-set', { layout, split, font });
+
+  // ---- 结构 ----
+  const el = (tag, id, cls) => { const n = document.createElement(tag); if (id) n.id = id; if (cls) n.className = cls; return n; };
+  const main = el('div', 'ps-main');
+  const left = el('div', 'ps-left');
+  const area = el('div', 'ps-area');
+  const box = el('div', 'ps-box');
+  const inkCanvas = el('canvas', 'ps-ink');
+  const hud = el('div', 'ps-hud');
+  const toc = el('div', 'ps-toc');
+  const bar = el('div', 'ps-bar');
+  const splitter = el('div', 'ps-split');
+  const right = el('div', 'ps-right');
+  const next = el('div', 'ps-next');
+  const nextCap = el('div', null, 'cap');
+  const nextBox = el('div', null, 'box');
+  const nextMini = el('div', null, 'mini');
+  nextBox.appendChild(nextMini);
+  next.append(nextCap, nextBox);
+  box.appendChild(inkCanvas);
+  area.append(box, toc, hud);
+  left.append(area, bar);
+  right.append(body, next);
+  main.append(left, splitter, right);
+  pv.insertBefore(main, shots);
+
+  // 观众舞台本体由稿子的脚本放进预览条里，这里每次都把它拿回来放大使用
+  const stageEl = document.getElementById('stage');
+  const claim = () => { if (stageEl && stageEl.parentElement !== box) box.insertBefore(stageEl, inkCanvas); };
+  new MutationObserver(claim).observe(shots, { childList: true, subtree: true });
+  claim();
+
+  // ---- 尺寸 ----
+  const fit = () => {
+    const W = cssNum('--deck-w', 1600);
+    const H = cssNum('--deck-h', 900);
+    const cs = getComputedStyle(area);
+    const aw = area.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const ah = area.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    const k = Math.max(0.05, Math.min(aw / W, ah / H));
+    box.style.width = Math.floor(W * k) + 'px';
+    box.style.height = Math.floor(H * k) + 'px';
+    box.style.setProperty('--ps-k', String(k));
+    const nk = nextBox.clientWidth / W;
+    nextMini.style.transform = `scale(${nk})`;
+  };
+  new ResizeObserver(fit).observe(area);
+  new ResizeObserver(fit).observe(nextBox);
+
+  const applyPrefs = () => {
+    pv.style.setProperty('--ps-split', String(split));
+    pv.style.setProperty('--ps-font', String(font));
+    pv.classList.toggle('lay-stage', layout === 'stage');
+    layoutBtn.firstChild.textContent = '布局 · ' + (layout === 'custom' ? '自定义' : LAYOUTS.find((l) => l.id === layout).name);
+    fit();
+  };
+
+  // ---- 工具栏 ----
+  const btn = (label, key, fn) => {
+    const b = el('button');
+    b.type = 'button';
+    b.append(label);
+    if (key) { const k = el('kbd'); k.textContent = key; b.appendChild(k); }
+    b.addEventListener('click', () => { fn(); b.blur(); });
+    return b;
+  };
+  let hudTimer;
+  const say = (msg) => {
+    hud.textContent = msg;
+    hud.classList.add('on');
+    clearTimeout(hudTimer);
+    hudTimer = setTimeout(() => hud.classList.remove('on'), 1400);
+  };
+  const tocBtn = btn('目录', 'G', () => toggleToc());
+  const layoutBtn = btn('', 'L', () => cycleLayout());
+  const penBtn = btn('画笔', 'E', () => togglePen());
+  const clearBtn = btn('清除', 'C', () => clearInk());
+  const sp = el('div', null, 'sp');
+  const fontDn = btn('A-', '-', () => setFont(font - 1));
+  const fontUp = btn('A+', '+', () => setFont(font + 1));
+  bar.append(tocBtn, layoutBtn, penBtn, clearBtn, sp, fontDn, fontUp);
+
+  function cycleLayout() {
+    const i = LAYOUTS.findIndex((l) => l.id === layout);
+    const n = LAYOUTS[(i + 1) % LAYOUTS.length];
+    layout = n.id; split = n.split; font = n.font;
+    applyPrefs(); save(); say('布局：' + n.name);
+  }
+  function setFont(v) {
+    font = Math.max(FONT_MIN, Math.min(FONT_MAX, v));
+    applyPrefs(); save(); say('台词字号 ' + font);
+  }
+
+  // ---- 拖动分隔条 ----
+  splitter.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    splitter.classList.add('drag');
+    const rect = main.getBoundingClientRect();
+    const move = (ev) => {
+      split = Math.round(Math.max(25, Math.min(85, ((ev.clientX - rect.left) / rect.width) * 100)));
+      layout = 'custom';
+      applyPrefs();
+    };
+    const up = () => {
+      splitter.classList.remove('drag');
+      window.removeEventListener('mousemove', move, true);
+      window.removeEventListener('mouseup', up, true);
+      save();
+    };
+    window.addEventListener('mousemove', move, true);
+    window.addEventListener('mouseup', up, true);
+  });
+
+  // ---- 页面状态 ----
+  const slideEls = () => Array.from(document.querySelectorAll('#slides > .slide'));
+  const curIndex = () => slideEls().findIndex((s) => s.classList.contains('on'));
+  const goTo = (i) => { const d = document.querySelectorAll('#dots > i')[i]; if (d) d.click(); };
+
+  // ---- 目录 ----
+  let tocOpen = false;
+  let tocSel = 0;
+  let tocCount = -1;
+  const buildToc = () => {
+    const slides = slideEls();
+    tocCount = slides.length;
+    toc.textContent = '';
+    const hd = el('div', null, 'hd');
+    hd.textContent = '目录 · ↑↓ 选择 · 回车跳转 · G 收起';
+    const ol = el('ol');
+    slides.forEach((s, i) => {
+      const li = el('li');
+      const n = el('i'); n.textContent = String(i + 1).padStart(2, '0');
+      li.append(n, document.createTextNode(s.dataset.t || `第 ${i + 1} 页`));
+      li.addEventListener('click', () => { goTo(i); toggleToc(false); });
+      ol.appendChild(li);
+    });
+    toc.append(hd, ol);
+  };
+  const markToc = (cur) => {
+    toc.querySelectorAll('li').forEach((li, i) => {
+      li.classList.toggle('now', i === cur);
+      li.classList.toggle('sel', i === tocSel);
+      if (i === tocSel) li.scrollIntoView({ block: 'nearest' });
+    });
+  };
+  function toggleToc(force) {
+    tocOpen = force == null ? !tocOpen : !!force;
+    if (tocOpen && tocCount !== slideEls().length) buildToc();
+    tocSel = Math.max(0, curIndex());
+    toc.classList.toggle('on', tocOpen);
+    tocBtn.classList.toggle('on', tocOpen);
+    if (tocOpen) markToc(curIndex());
+  }
+
+  // ---- 下一页预览 ----
+  const renderNext = (cur) => {
+    const slides = slideEls();
+    nextMini.textContent = '';
+    const s = slides[cur + 1];
+    if (!s) { nextCap.textContent = '已是最后一页'; return; }
+    nextCap.textContent = `下一页 · ${String(cur + 2).padStart(2, '0')} ${s.dataset.t || ''}`;
+    const c = s.cloneNode(true);
+    c.classList.add('on');
+    c.removeAttribute('data-t');
+    c.querySelectorAll('[id]').forEach((n) => n.removeAttribute('id'));
+    c.querySelectorAll('.an').forEach((n) => { n.style.animation = 'none'; });
+    nextMini.appendChild(c);
+    fit();
+  };
+
+  // ---- 光点与划线 ----
+  const ink = makeInk(inkCanvas, () => inkCanvas.getBoundingClientRect());
+  const emit = (m) => { ink.apply(m); ipcRenderer.send('stage:pointer', m); };
+  const emitRemote = (m) => ipcRenderer.send('stage:pointer', m);
+  let pen = false;
+  let strokeN = 0;
+  let drawing = null;
+  let last = null;
+  let pending = null;
+  let flushRaf = 0;
+  const norm = (e) => {
+    const r = inkCanvas.getBoundingClientRect();
+    return [Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), Math.max(0, Math.min(1, (e.clientY - r.top) / r.height))];
+  };
+  const flush = () => {
+    flushRaf = 0;
+    if (!pending) return;
+    const p = pending;
+    pending = null;
+    emitRemote({ k: 'm', x: p.pos[0], y: p.pos[1] });
+    if (p.pts.length && drawing) { ink.add(drawing.id, p.pts); emitRemote({ k: 's', id: drawing.id, pts: p.pts }); }
+  };
+  const queue = (pos, pt) => {
+    pending = pending || { pos, pts: [] };
+    pending.pos = pos;
+    if (pt) pending.pts.push(pt);
+    if (!flushRaf) flushRaf = requestAnimationFrame(flush);
+  };
+  const endStroke = () => {
+    if (!drawing) return;
+    flush();
+    emit({ k: 'e', id: drawing.id });
+    drawing = null;
+  };
+  inkCanvas.addEventListener('mousemove', (e) => {
+    last = norm(e);
+    queue(last, drawing ? last : null);
+  });
+  inkCanvas.addEventListener('mousedown', (e) => {
+    if (e.button !== 0 || !(pen || e.shiftKey)) return;
+    e.preventDefault();
+    drawing = { id: `${Date.now().toString(36)}-${++strokeN}` };
+    last = norm(e);
+    queue(last, last);
+  });
+  window.addEventListener('mouseup', endStroke, true);
+  inkCanvas.addEventListener('mouseleave', () => { endStroke(); last = null; emitRemote({ k: 'l' }); });
+  setInterval(() => { if (last) emitRemote({ k: 'm', x: last[0], y: last[1] }); }, 1500); // 光点心跳，鼠标不动也不会被收起
+
+  function togglePen(force) {
+    pen = force == null ? !pen : !!force;
+    penBtn.classList.toggle('on', pen);
+    inkCanvas.classList.toggle('pen', pen);
+    say(pen ? '画笔 开 · 拖动划线' : '画笔 关');
+  }
+  function clearInk() { emit({ k: 'c' }); }
+
+  // ---- 翻页检测：清笔迹、更新目录与预览 ----
+  let lastIdx = -2;
+  const onTick = () => {
+    const i = curIndex();
+    if (i === lastIdx || i < 0) return;
+    lastIdx = i;
+    clearInk();
+    renderNext(i);
+    if (tocOpen) { tocSel = i; markToc(i); }
+  };
+  window.addEventListener('hashchange', onTick);
+  setInterval(onTick, 150);
+
+  // ---- 键盘 ----
+  let digits = '';
+  let digitTimer;
+  const showDigits = () => {
+    clearTimeout(digitTimer);
+    if (!digits) { hud.classList.remove('on'); return; }
+    say('跳转到第 ' + digits + ' 页 · 回车');
+    digitTimer = setTimeout(() => { digits = ''; }, 2500);
+  };
+  const eat = (e) => { e.preventDefault(); e.stopImmediatePropagation(); };
+  window.addEventListener('keydown', (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (/^[0-9]$/.test(k)) { eat(e); digits = (digits + k).slice(0, 3); showDigits(); return; }
+    if (digits && k === 'Enter') {
+      eat(e);
+      const n = Math.max(1, Math.min(slideEls().length, parseInt(digits, 10)));
+      digits = '';
+      goTo(n - 1);
+      return;
+    }
+    if (digits && k === 'Backspace') { eat(e); digits = digits.slice(0, -1); showDigits(); return; }
+    if (tocOpen && (k === 'ArrowUp' || k === 'ArrowDown')) {
+      eat(e);
+      tocSel = Math.max(0, Math.min(tocCount - 1, tocSel + (k === 'ArrowDown' ? 1 : -1)));
+      markToc(curIndex());
+      return;
+    }
+    if (tocOpen && k === 'Enter') { eat(e); goTo(tocSel); toggleToc(false); return; }
+    switch (k) {
+      case 'g': eat(e); toggleToc(); break;
+      case 'l': eat(e); cycleLayout(); break;
+      case 'e': eat(e); togglePen(); break;
+      case 'c': eat(e); clearInk(); say('已清除笔迹'); break;
+      case '+': case '=': eat(e); setFont(font + 1); break;
+      case '-': case '_': eat(e); setFont(font - 1); break;
+      default: break;
+    }
+  }, true);
+
+  applyPrefs();
+  buildToc();
+  onTick();
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   const root = document.documentElement;
   const isPresenter = /[?&]notes\b/.test(location.search);
@@ -43,10 +488,12 @@ window.addEventListener('DOMContentLoaded', () => {
   document.head.appendChild(style);
 
   if (isPresenter) {
-    addEndButton(); // 演讲者窗口保持原样，只多一个「结束放映」
+    addEndButton();
+    initPresenter(style);
     return;
   }
   document.body.classList.add('stage-audience');
+  initAudienceInk();
 
   const drag = document.createElement('div');
   drag.id = 'stage-drag';

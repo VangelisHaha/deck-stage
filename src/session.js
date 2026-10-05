@@ -251,6 +251,11 @@ class Presentation {
     }
   }
 
+  // 演讲者窗口的光点 / 划线消息转给观众窗口
+  relayPointer(msg) {
+    if (this.audience && !this.audience.isDestroyed()) this.audience.webContents.send('stage:pointer', msg);
+  }
+
   toggleBlackout() {
     this.blackout = !this.blackout;
     if (this.audience) this.audience.webContents.send('stage:blackout', this.blackout);

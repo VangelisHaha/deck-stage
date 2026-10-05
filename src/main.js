@@ -258,6 +258,18 @@ function showLibrary() {
 ipcMain.on('stage:end', (e) => {
   if (presentation && presentation.presenter && e.sender === presentation.presenter.webContents) presentation.end();
 });
+// 演讲者窗口的光点 / 划线：只认放映自己的演讲者窗口，转给观众窗口画
+const fromPresenter = (e) => presentation && presentation.presenter && !presentation.presenter.isDestroyed() && e.sender === presentation.presenter.webContents;
+ipcMain.on('stage:pointer', (e, msg) => {
+  if (fromPresenter(e)) presentation.relayPointer(msg);
+});
+// 演讲者视图的布局偏好（布局档、分栏比例、台词字号）
+ipcMain.on('stage:prefs-get', (e) => { e.returnValue = store.read().presenter || {}; });
+ipcMain.on('stage:prefs-set', (e, p) => {
+  if (!fromPresenter(e) || !p || typeof p !== 'object') return;
+  const clean = { layout: String(p.layout || 'bal'), split: Number(p.split) || 62, font: Number(p.font) || 19 };
+  store.update((c) => { c.presenter = clean; });
+});
 ipcMain.handle('stage:get-state', () => buildState());
 ipcMain.handle('stage:add-root', () => actions.addRootDialog());
 ipcMain.handle('stage:remove-root', (_e, dir) => { store.removeRoot(dir); pushState(); });
