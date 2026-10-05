@@ -197,6 +197,22 @@ const PV_CSS = `
 #ps-toc li.now i { color: #FF4F1F; }
 `;
 
+// 汉字拼音首字母：按拼音排序的分界字归组，不依赖字库（目录搜索用）
+const PY_EDGE = Array.from('阿八嚓哒妸发旮哈讥咔垃妈拿哦啪期然撒塌挖昔压匝');
+const PY_LETTER = 'abcdefghjklmnopqrstwxyz';
+const PY_COLLATOR = new Intl.Collator('zh-Hans-CN');
+function pinyinInitials(text) {
+  let out = '';
+  for (const ch of text) {
+    if (/[a-z0-9]/i.test(ch)) { out += ch.toLowerCase(); continue; }
+    if (!/[\u4e00-\u9fff]/.test(ch)) continue;
+    let i = 0;
+    while (i < PY_EDGE.length - 1 && PY_COLLATOR.compare(ch, PY_EDGE[i + 1]) >= 0) i++;
+    out += PY_LETTER[i];
+  }
+  return out;
+}
+
 function initPresenter(styleEl) {
   styleEl.textContent += PV_CSS;
   const pv = document.getElementById('pv');
@@ -343,7 +359,7 @@ function initPresenter(styleEl) {
   let tocQuery = '';
   const tocInput = el('input');
   tocInput.type = 'text';
-  tocInput.placeholder = '输入页码或标题，如 11';
+  tocInput.placeholder = '页码、标题或拼音首字母';
   tocInput.spellcheck = false;
   tocInput.autocomplete = 'off';
   const tocList = el('ol');
@@ -365,6 +381,7 @@ function initPresenter(styleEl) {
       const li = el('li');
       li.dataset.i = String(i);
       li.dataset.q = `${i + 1} ${String(i + 1).padStart(2, '0')} ${s.dataset.t || ''}`.toLowerCase();
+      li.dataset.py = pinyinInitials(s.dataset.t || '');
       const n = el('i'); n.textContent = String(i + 1).padStart(2, '0');
       li.append(n, document.createTextNode(s.dataset.t || `第 ${i + 1} 页`));
       li.addEventListener('click', () => goTo(i));
@@ -378,7 +395,7 @@ function initPresenter(styleEl) {
     const q = tocQuery.trim().toLowerCase();
     Array.from(tocList.children).forEach((li) => {
       const i = Number(li.dataset.i);
-      li.hidden = !!q && !(/^\d+$/.test(q) ? String(i + 1).startsWith(String(parseInt(q, 10))) : li.dataset.q.includes(q));
+      li.hidden = !!q && !(/^\d+$/.test(q) ? String(i + 1).startsWith(String(parseInt(q, 10))) : li.dataset.q.includes(q) || (/^[a-z]+$/.test(q) && li.dataset.py.includes(q)));
     });
     const vis = visibleItems();
     if (!vis.some((li) => Number(li.dataset.i) === tocSel)) tocSel = vis.length ? Number(vis[0].dataset.i) : -1;

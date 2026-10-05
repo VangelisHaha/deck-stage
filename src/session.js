@@ -174,10 +174,23 @@ class Presentation {
         return win.setBounds({ x: wa.x + 24, y: wa.y + 24, width: wa.width - 48, height: wa.height - 48 });
       }
     }
+    // 窗口模式：演讲者窗口已经在另一块屏幕上就别动它（从全屏按 Esc 退出时，它不该跟着跳到观众那块屏）
+    if (screen.getDisplayMatching(win.getBounds()).id !== audienceDisplay.id) return;
     const wa = audienceDisplay.workArea;
-    const width = Math.min(960, Math.floor(wa.width * 0.5));
-    const height = Math.min(640, Math.floor(wa.height * 0.7));
+    const width = Math.min(1100, Math.floor(wa.width * 0.55));
+    const height = Math.min(700, Math.floor(wa.height * 0.72));
     win.setBounds({ x: wa.x + wa.width - width - 24, y: wa.y + wa.height - height - 24, width, height });
+  }
+
+  // 点 Dock 图标时用：把放映的窗口拉回前台（窗口被挪走、最小化或关掉的演讲者窗口都能找回来）
+  bringFront() {
+    if (this.presenter && !this.presenter.isDestroyed()) {
+      if (this.presenter.isMinimized()) this.presenter.restore();
+      this.presenter.show();
+      this.presenter.focus();
+    } else {
+      this.reopenPresenter();
+    }
   }
 
   toggleFullscreen() {

@@ -297,7 +297,7 @@ app.on('open-url', (e, url) => {
 });
 app.on('second-instance', (_e, argv) => handleArgv(argv));
 app.on('before-quit', () => { remote.stop(); });
-app.on('activate', () => { if (!presentation) showLibrary(); });
+app.on('activate', () => { if (presentation) presentation.bringFront(); else showLibrary(); });
 app.on('window-all-closed', () => { if (!presentation) app.quit(); });
 
 app.whenReady().then(() => {
