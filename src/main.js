@@ -201,6 +201,10 @@ function showLibrary() {
   library.on('closed', () => { library = null; if (!presentation) app.quit(); });
 }
 
+// 演讲者窗口里的「结束放映」按钮（只认放映自己的演讲者窗口发来的消息）
+ipcMain.on('stage:end', (e) => {
+  if (presentation && presentation.presenter && e.sender === presentation.presenter.webContents) presentation.end();
+});
 ipcMain.handle('stage:get-state', () => buildState());
 ipcMain.handle('stage:add-root', () => actions.addRootDialog());
 ipcMain.handle('stage:remove-root', (_e, dir) => { store.removeRoot(dir); pushState(); });

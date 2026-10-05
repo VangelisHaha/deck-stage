@@ -10,8 +10,29 @@ html.stage-idle, html.stage-idle * { cursor: none !important; }
 html.stage-fs #stage-drag { display: none; }
 #stage-black { position: fixed; inset: 0; background: #000; z-index: 2147483646; display: none; }
 #stage-black.on { display: block; }
+.stage-end { margin-left: 12px; height: 32px; padding: 0 14px; border: 1px solid #F1EEE6; background: transparent; color: #F1EEE6; font: 12px "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: 1px; cursor: pointer; white-space: nowrap; }
+.stage-end.confirm { background: #FF4F1F; border-color: #FF4F1F; color: #121212; }
+.stage-end.float { position: fixed; top: 10px; right: 10px; z-index: 2147483000; }
 `;
 const IDLE_MS = 2000;
+
+// 演讲者窗口的「结束放映」：点一次变橙色要求确认，3 秒内再点才真正结束，防止讲到一半误触
+function addEndButton() {
+  const btn = document.createElement('button');
+  btn.className = 'stage-end';
+  btn.type = 'button';
+  btn.textContent = '结束放映';
+  const host = document.querySelector('#pv .pvtop');
+  if (host) host.appendChild(btn); else { btn.classList.add('float'); document.body.appendChild(btn); }
+  let timer;
+  btn.addEventListener('click', () => {
+    if (btn.classList.contains('confirm')) { ipcRenderer.send('stage:end'); return; }
+    btn.classList.add('confirm');
+    btn.textContent = '再点一次结束';
+    timer = setTimeout(() => { btn.classList.remove('confirm'); btn.textContent = '结束放映'; }, 3000);
+  });
+  btn.addEventListener('blur', () => { clearTimeout(timer); btn.classList.remove('confirm'); btn.textContent = '结束放映'; });
+}
 
 window.addEventListener('DOMContentLoaded', () => {
   const root = document.documentElement;
@@ -21,7 +42,10 @@ window.addEventListener('DOMContentLoaded', () => {
   style.textContent = CSS;
   document.head.appendChild(style);
 
-  if (isPresenter) return; // 演讲者窗口保持原样，只有观众窗口需要「干净」
+  if (isPresenter) {
+    addEndButton(); // 演讲者窗口保持原样，只多一个「结束放映」
+    return;
+  }
   document.body.classList.add('stage-audience');
 
   const drag = document.createElement('div');

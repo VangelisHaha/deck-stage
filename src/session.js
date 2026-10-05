@@ -29,6 +29,7 @@ class Presentation {
     this.screenHandlers = [];
     this.displayTimer = null;
     this.lastApply = 0;
+    this.lastEsc = 0;
     // 遥控端要用的稿子信息：每页标题、台词、建议用时，以及当前页和计时起点
     this.title = readDeckTitle(root);
     this.slides = [];
@@ -232,9 +233,14 @@ class Presentation {
       case 'b': e.preventDefault(); this.toggleBlackout(); break;
       case 'p': e.preventDefault(); this.focusPresenter(); break;
       case 'escape':
+        e.preventDefault();
         if (this.target.mode === 'screen') {
-          e.preventDefault();
           this.applyTarget({ mode: 'window', displayId: this.target.displayId });
+        } else if (Date.now() - this.lastEsc < 1500) {
+          this.end(); // 窗口模式下连按两次 Esc 结束放映
+        } else {
+          this.lastEsc = Date.now();
+          this.notify('再按一次 Esc 结束放映');
         }
         break;
       default: break;
