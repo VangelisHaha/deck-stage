@@ -27,7 +27,9 @@ function buildMenu({ presentation, hotReload, actions }) {
       label: '文件变更自动刷新', type: 'checkbox', checked: !!hotReload,
       click: (item) => actions.setHotReload(item.checked)
     },
-    { label: '导出 PPTX…', enabled: live, click: () => presentation.exportPptx() }
+    { label: '导出 PPTX…', enabled: live, click: () => presentation.exportPptx() },
+    { type: 'separator' },
+    { label: '手机遥控…', accelerator: 'CmdOrCtrl+K', click: actions.showRemote }
   ];
 
   const template = [

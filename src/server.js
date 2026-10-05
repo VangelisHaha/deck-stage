@@ -76,4 +76,4 @@ function startServer(root, preferredPort) {
   });
 }
 
-module.exports = { startServer };
+module.exports = { startServer, serveFile, send };

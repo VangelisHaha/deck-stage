@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { BrowserWindow, Notification, app, powerSaveBlocker, screen, session, shell } = require('electron');
 const { startServer } = require('./server');
-const { fitWindow16x9, stablePort } = require('./util');
+const { fitWindow16x9, stablePort, readDeckTitle } = require('./util');
 
 const PRELOAD = path.join(__dirname, 'deck-preload.js');
 const sameRect = (a, b) => a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
@@ -29,6 +29,12 @@ class Presentation {
     this.screenHandlers = [];
     this.displayTimer = null;
     this.lastApply = 0;
+    // 遥控端要用的稿子信息：每页标题、台词、建议用时，以及当前页和计时起点
+    this.title = readDeckTitle(root);
+    this.slides = [];
+    this.cur = 0;
+    this.t0 = 0;        // 离开封面开始总计时，和稿子自带的演讲者视图口径一致
+    this.pageAt = Date.now();
   }
 
   async start(hotReload) {
@@ -76,6 +82,8 @@ class Presentation {
       if (new URL(u).origin !== this.server.origin) e.preventDefault();
     });
     wc.on('before-input-event', (e, input) => this.onKey(e, input));
+    wc.on('did-finish-load', () => this.loadDeckInfo());
+    wc.on('did-navigate-in-page', () => this.syncCur());
     win.loadURL(url);
     return win;
   }
@@ -268,6 +276,81 @@ class Presentation {
 
   notify(body) {
     if (Notification.isSupported()) new Notification({ title: 'DeckStage', body, silent: true }).show();
+  }
+
+  // ---------- 遥控端 ----------
+
+  // 读稿子里已有的数据：data-t 是标题，__NOTES[data-t] 是台词，__cur() 是当前页
+  controlWindow() {
+    for (const w of [this.presenter, this.audience]) if (w && !w.isDestroyed()) return w;
+    return null;
+  }
+
+  async loadDeckInfo() {
+    const win = this.controlWindow();
+    if (!win) return;
+    try {
+      const raw = await win.webContents.executeJavaScript(`(function(){
+        var N = window.__NOTES || {}, S = window.__slides || [];
+        return JSON.stringify({
+          cur: window.__cur ? window.__cur() : 0,
+          slides: Array.prototype.map.call(S, function(x){
+            var k = x.dataset.t || '', n = N[k] || {};
+            return { t: k, sec: n.sec || 0, text: n.text || '' };
+          })
+        });
+      })()`);
+      const info = JSON.parse(raw);
+      this.slides = info.slides;
+      this.cur = info.cur;
+      this.pageAt = Date.now();
+      this.onChange();
+    } catch (e) { /* 页面还没就绪，下一次加载完成会再读 */ }
+  }
+
+  async syncCur() {
+    const win = this.controlWindow();
+    if (!win) return;
+    try {
+      const n = await win.webContents.executeJavaScript('window.__cur ? window.__cur() : 0');
+      if (n === this.cur) return;
+      this.cur = n;
+      if (!this.t0 && n > 0) this.t0 = Date.now();
+      this.pageAt = Date.now();
+      this.onChange();
+    } catch (e) { /* 窗口正在关闭 */ }
+  }
+
+  remoteState() {
+    const cur = this.slides[this.cur] || { t: '', sec: 0, text: '' };
+    const next = this.slides[this.cur + 1];
+    return {
+      live: true,
+      deck: this.title,
+      page: this.cur,
+      total: this.slides.length,
+      titles: this.slides.map((x) => x.t),
+      slide: cur,
+      next: next ? next.t : '',
+      t0: this.t0,
+      pageAt: this.pageAt,
+      now: Date.now(),
+      blackout: this.blackout
+    };
+  }
+
+  // 遥控指令。翻页走稿子自己的 __go，两个窗口靠它原有的同步机制保持一致
+  async remoteCommand({ cmd, n }) {
+    if (cmd === 'black') { this.toggleBlackout(); return true; }
+    const win = this.controlWindow();
+    if (!win) return false;
+    let expr;
+    if (cmd === 'next') expr = 'window.__go(window.__cur() + 1)';
+    else if (cmd === 'prev') expr = 'window.__go(window.__cur() - 1)';
+    else if (cmd === 'goto' && Number.isInteger(n)) expr = `window.__go(${n})`;
+    else return false;
+    await win.webContents.executeJavaScript(`(function(){ if (window.__go) { ${expr}; } })()`);
+    return true;
   }
 
   // ---------- 结束 ----------

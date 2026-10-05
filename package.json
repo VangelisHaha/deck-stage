@@ -19,14 +19,41 @@
   "build": {
     "appId": "com.vangelis.deckstage",
     "productName": "DeckStage",
-    "directories": { "output": "dist" },
-    "files": ["src/**/*", "package.json"],
-    "extraResources": [{ "from": "skills", "to": "skills" }],
-    "protocols": [{ "name": "DeckStage", "schemes": ["deckstage"] }],
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "skills",
+        "to": "skills"
+      }
+    ],
+    "protocols": [
+      {
+        "name": "DeckStage",
+        "schemes": [
+          "deckstage"
+        ]
+      }
+    ],
     "mac": {
       "category": "public.app-category.productivity",
       "identity": null,
-      "target": [{ "target": "dir", "arch": ["x64"] }]
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
     }
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
   }
 }

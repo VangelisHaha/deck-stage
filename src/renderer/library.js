@@ -7,6 +7,7 @@
   let filter = 'all'; // all | recent | 根目录路径
   let query = '';
   let selected = null;
+  let remoteInfo = { enabled: false, devices: [] };
 
   function el(tag, cls, text) {
     const n = document.createElement(tag);
@@ -117,7 +118,48 @@
         : '还没收到 Agent 的回报。装好后这里会变成「已安装 · Agent 名」。'));
   }
 
+  async function refreshRemote() {
+    remoteInfo = await window.stage.remoteGet();
+    renderRemote();
+  }
+
+  function renderRemoteBtn() {
+    const r = state.remote;
+    $('openRemote').className = 'remote-btn' + (r.enabled ? ' on' : '');
+    $('remoteText').textContent = r.enabled ? `手机遥控 · 开${r.online ? ' · ' + r.online + ' 台' : ''}` : '手机遥控 · 关';
+  }
+
+  function renderRemote() {
+    const on = remoteInfo.enabled;
+    $('remoteToggle').className = 'switch' + (on ? ' on' : '');
+    $('qrBox').className = 'qr-box' + (on ? '' : ' off');
+    $('remoteOn').hidden = !on;
+    $('remoteOff').hidden = on;
+    if (!on) { $('qr').removeAttribute('src'); return; }
+    $('qr').src = remoteInfo.qr;
+    $('pairCode').textContent = remoteInfo.code.replace(/^(\d{3})(\d{3})$/, '$1 $2');
+    $('remoteUrl').textContent = remoteInfo.base;
+    const box = $('devices');
+    box.textContent = '';
+    if (!remoteInfo.devices.length) {
+      const empty = el('div', 'muted small', '还没有手机连接。');
+      empty.style.marginTop = '10px';
+      box.appendChild(empty);
+    }
+    for (const d of remoteInfo.devices) {
+      const row = el('div', 'device');
+      row.appendChild(el('span', 'sq' + (d.online ? '' : ' off')));
+      row.appendChild(el('span', 'grow', d.label));
+      row.appendChild(el('span', 'mono', d.ip));
+      const kick = el('button', 'link-ink', '断开');
+      kick.onclick = () => window.stage.remoteKick(d.id);
+      row.appendChild(kick);
+      box.appendChild(row);
+    }
+  }
+
   function render() {
+    renderRemoteBtn();
     renderNav();
     renderList();
     renderBar();
@@ -126,6 +168,7 @@
 
   async function refresh() {
     state = await window.stage.getState();
+    if (!$('remote').hidden) refreshRemote();
     if (state.selected) { selected = state.selected; if (!visibleDecks().some((d) => d.dir === selected)) filter = 'all'; }
     render();
   }
@@ -137,11 +180,18 @@
   }
 
   function showSkills(on) { $('skills').hidden = !on; }
+  function showRemote(on) { $('remote').hidden = !on; if (on) refreshRemote(); }
 
   $('q').addEventListener('input', (e) => { query = e.target.value; renderList(); renderBar(); });
   $('addRoot').onclick = () => window.stage.addRoot();
   $('openSkills').onclick = () => showSkills(true);
   $('closeSkills').onclick = () => showSkills(false);
+  $('openRemote').onclick = () => showRemote(true);
+  $('closeRemote').onclick = () => showRemote(false);
+  $('remote').addEventListener('click', (e) => { if (e.target === $('remote')) showRemote(false); });
+  $('remoteToggle').onclick = async () => { await window.stage.remoteToggle(!remoteInfo.enabled); await refreshRemote(); };
+  $('resetPair').onclick = async () => { await window.stage.remoteReset(); await refreshRemote(); };
+  $('copyUrl').onclick = async (e) => { await window.stage.copy(remoteInfo.base); flash(e.target, '已复制'); };
   $('skills').addEventListener('click', (e) => { if (e.target === $('skills')) showSkills(false); });
   $('revealSkill').onclick = () => window.stage.revealSkill();
   $('copyPath').onclick = async (e) => { await window.stage.copy(state.skills.dir); flash(e.target, '已复制'); };
@@ -150,9 +200,9 @@
   $('reveal').onclick = () => { if (selected) window.stage.reveal(selected); };
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { if (!$('skills').hidden) showSkills(false); else if (query) { $('q').value = ''; query = ''; renderList(); renderBar(); } return; }
+    if (e.key === 'Escape') { if (!$('remote').hidden) showRemote(false); else if (!$('skills').hidden) showSkills(false); else if (query) { $('q').value = ''; query = ''; renderList(); renderBar(); } return; }
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); $('q').focus(); return; }
-    if (!$('skills').hidden || document.activeElement === $('q') && e.key !== 'Enter' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    if (!$('skills').hidden || !$('remote').hidden || document.activeElement === $('q') && e.key !== 'Enter' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
     const decks = visibleDecks();
     const i = decks.findIndex((d) => d.dir === selected);
     if (e.key === 'ArrowDown' && i < decks.length - 1) { e.preventDefault(); selected = decks[i + 1].dir; window.stage.select(selected); renderList(); renderBar(); }
@@ -162,5 +212,6 @@
 
   window.stage.onChanged(refresh);
   window.stage.onShowSkills(() => { showSkills(true); refresh(); });
+  window.stage.onShowRemote(() => { showRemote(true); refresh(); });
   refresh();
 })();

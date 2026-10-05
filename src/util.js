@@ -88,7 +88,29 @@ function fitWindow16x9(workArea, { maxWidth = 1280, widthRatio = 0.62, inset = 4
   return { x: workArea.x + inset, y: workArea.y + inset, width, height };
 }
 
+// 本机局域网 IPv4，私有网段优先（192.168 / 10 / 172.16-31），用来拼手机访问的地址
+function lanAddresses() {
+  const out = [];
+  for (const list of Object.values(os.networkInterfaces())) {
+    for (const i of list || []) {
+      if (i.family === 'IPv4' && !i.internal) out.push(i.address);
+    }
+  }
+  const rank = (ip) => (/^(192\.168|10\.|172\.(1[6-9]|2\d|3[01]))/.test(ip) ? 0 : 1);
+  return out.sort((a, b) => rank(a) - rank(b));
+}
+
+// 设备名：只用于「已连接设备」列表，一眼看出是哪台
+function uaLabel(ua = '') {
+  if (/iPhone|iPad/.test(ua)) return 'iPhone / iPad';
+  if (/Android/.test(ua)) return 'Android';
+  if (/Macintosh/.test(ua)) return 'Mac';
+  if (/Windows/.test(ua)) return 'Windows';
+  return '其他设备';
+}
+
 module.exports = {
+  lanAddresses, uaLabel,
   expandHome, isDir, isDeckDir, resolveDeckRoot, readDeckTitle, deckLabel,
   latestMtime, stablePort, formatTime, fitWindow16x9
 };

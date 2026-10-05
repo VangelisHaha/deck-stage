@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0F0F0E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>DeckStage 遥控</title>
+<link rel="stylesheet" href="/remote.css">
+</head>
+<body>
+
+<section id="pair" class="screen" hidden>
+  <div class="kicker">DECKSTAGE · REMOTE</div>
+  <h1>连上<br>电脑</h1>
+  <p class="sub">在电脑的 DeckStage 里打开「手机遥控」，扫二维码，或输入屏幕上的 6 位配对码。</p>
+  <form id="pairForm">
+    <label class="label" for="code">配对码</label>
+    <input id="code" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" placeholder="000000">
+    <div id="pairErr" class="err" role="alert"></div>
+    <button type="submit" class="outline">连接</button>
+  </form>
+</section>
+
+<section id="idle" class="screen" hidden>
+  <div class="kicker"><span class="sq off"></span>IDLE · 已连接</div>
+  <h1>等待<br>放映</h1>
+  <p class="sub">电脑上还没有开始放映。在 DeckStage 里选一份稿子，点「开始放映」，这里会自动出现遥控界面。</p>
+</section>
+
+<section id="live" class="screen live" hidden>
+  <div class="bar">
+    <div class="kicker"><span class="sq"></span>LIVE<span id="deckName" class="dim"></span></div>
+    <div id="elapsed" class="mono">00:00</div>
+  </div>
+  <div class="num"><span id="pageNo">01</span><span id="pageTotal" class="dim mono">/ 00</span></div>
+  <div id="ticks" class="ticks" aria-hidden="true"></div>
+  <div id="slideTitle" class="slide-title"></div>
+  <div id="notes" class="notes"></div>
+  <div id="nextUp" class="next-up"></div>
+  <button id="btnNext" class="next" type="button"><span>下一页</span><span aria-hidden="true">▶</span></button>
+  <div class="row">
+    <button id="btnPrev" class="outline wide" type="button">◀ 上一页</button>
+    <button id="btnBlack" class="outline" type="button">黑屏</button>
+    <button id="btnJump" class="outline" type="button">跳页</button>
+  </div>
+  <div id="extras" class="extras" hidden>
+    <label id="vibrateRow" class="toggle-row" hidden><span>翻页时震动</span><input id="vibrate" type="checkbox"></label>
+    <div id="keysBox" hidden>
+      <div class="label">按键映射</div>
+      <label class="toggle-row"><span>音量 +</span><select id="mapUp"></select></label>
+      <label class="toggle-row"><span>音量 −</span><select id="mapDown"></select></label>
+    </div>
+  </div>
+  <div id="conn" class="conn" hidden>连接中断，正在重连…</div>
+</section>
+
+<section id="jump" class="sheet" hidden>
+  <div class="sheet-head"><div class="label">跳到哪一页</div><button id="jumpClose" class="link" type="button">关闭</button></div>
+  <div id="jumpList"></div>
+</section>
+
+<script src="/remote.js"></script>
+</body>
+</html>

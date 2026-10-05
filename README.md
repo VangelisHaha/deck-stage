@@ -8,6 +8,7 @@ HTML 演示稿的 Mac 放映壳。把 [deck-html](skills/deck-html) 生成的稿
 - 内置静态服务，所有响应 `no-store`，不再有浏览器缓存问题
 - 放映期间阻止 Mac 息屏
 - 稿库：登记几个目录，自动扫描里面的稿子
+- 手机遥控：手机浏览器扫码就能翻页、看台词，不用装 App
 
 新建和修改稿子不在这个应用里做，由 Agent 用配套的 `deck-html` skill 完成。
 
@@ -38,6 +39,34 @@ npm run install-app     # 打包并安装到 /Applications/DeckStage.app
 | `⌘W` | 结束放映，回到稿库 |
 
 菜单「放映」里还有「投屏到」、「文件变更自动刷新」、「导出 PPTX」。
+
+## 手机遥控
+
+稿库左下角「手机遥控」（或 `⌘K`）打开面板：
+
+1. 打开开关，面板显示二维码、6 位配对码和地址
+2. 手机和电脑连同一个 Wi-Fi，用浏览器扫二维码；扫不了就打开地址，输入配对码
+3. 手机上看到当前页码、标题、台词和下一页预告，可以上一页、下一页、跳页、黑屏
+
+安全：默认关闭，退出应用即失效。每次开启重新生成令牌和配对码。每台手机有独立 cookie，可以在面板里单独「断开」，或「重置配对」让所有手机重新配对。配对码连错 5 次，该 IP 锁定 1 分钟。局域网内是明文 HTTP，只在可信 Wi-Fi 下使用。
+
+网页能做的直接显示，网页做不了的不展示：
+
+| 功能 | 浏览器 | App 壳 |
+|---|---|---|
+| 翻页、台词、跳页、黑屏、计时 | ✓ | ✓ |
+| 防息屏（Wake Lock） | 支持的浏览器自动启用 | ✓ |
+| 翻页震动 | 仅 Android 浏览器，不支持就不显示 | ✓ |
+| 音量键翻页 | 不显示 | 规划中，见下 |
+
+### 给 App 壳留的接口
+
+遥控页检测到 `window.DeckStageNative.volumeKeys` 才会出现「按键映射」。原生层（Android / iOS）只需要：
+
+- 提供 `window.DeckStageNative = { volumeKeys: true, enableVolumeKeys(on) }`
+- 音量键被按下时派发 `window.dispatchEvent(new CustomEvent('deckstage:key', { detail: 'volumeUp' | 'volumeDown' }))`
+
+映射关系（音量 + 对应上一页还是下一页）由页面自己保存。Android 前台用 `dispatchKeyEvent` 拦截，息屏需前台服务加 MediaSession；iOS 没有公开接口，只能在前台监听系统音量变化并复位。
 
 ## 稿子的识别规则
 
@@ -74,6 +103,8 @@ src/session.js       一次放映：服务、双窗口、投屏布局、快捷�
 src/server.js        内置静态服务（127.0.0.1，no-store，Range）
 src/library.js       稿库扫描
 src/store.js         配置读写
+src/remote.js        手机遥控服务（0.0.0.0，SSE + POST，令牌/配对码）
+src/remote/          手机遥控网页
 src/skill.js         skill 位置与安装提示词
 src/util.js          公共工具
 src/menu.js          菜单栏
@@ -85,5 +116,7 @@ skills/deck-html/    配套 skill
 ## 路线
 
 - [x] 稿库、双窗口、投屏切换、快捷键、skill 联动
-- [ ] 局域网演讲者视图（WebSocket 中继 + 令牌 + 二维码）
-- [ ] 手机遥控 App（Capacitor，Android 优先，音量键翻页）
+- [x] 手机网页遥控（局域网，扫码 / 配对码）
+- [ ] Android App 壳（Capacitor，音量键翻页，锁屏可用）
+- [ ] iOS App 壳（前台音量键）
+- [ ] Windows 适配
