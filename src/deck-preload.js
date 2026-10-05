@@ -418,13 +418,12 @@ function initPresenter(styleEl) {
   };
   const jumpSel = () => { if (tocSel >= 0) goTo(tocSel); };
   tocInput.addEventListener('input', () => { tocQuery = tocInput.value; filterToc(); });
-  tocInput.addEventListener('focus', () => ipcRenderer.send('stage:typing', true));
-  tocInput.addEventListener('blur', () => ipcRenderer.send('stage:typing', false));
   function toggleToc(force) {
     tocOpen = force == null ? !tocOpen : !!force;
     if (tocOpen && tocCount !== slideEls().length) buildToc();
     toc.classList.toggle('on', tocOpen);
     tocBtn.classList.toggle('on', tocOpen);
+    ipcRenderer.send('stage:typing', tocOpen); // 目录开着期间，放映快捷键（F/D/B/P）全部让位
     if (tocOpen) {
       tocQuery = ''; tocInput.value = '';
       tocSel = Math.max(0, curIndex());
@@ -545,6 +544,7 @@ function initPresenter(styleEl) {
       else if (k === 'Enter') { e.preventDefault(); jumpSel(); tocQuery = ''; tocInput.value = ''; filterToc(); }
       return;
     }
+    if (tocOpen && k !== 'g' && e.key.length === 1) { tocInput.focus(); return; } // 目录开着：可打印字符一律进搜索框，不触发任何快捷键
     if (/^[0-9]$/.test(k)) { eat(e); digits = (digits + k).slice(0, 3); showDigits(); return; }
     if (digits && k === 'Enter') {
       eat(e);
