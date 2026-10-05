@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('stage', {
   getState: () => ipcRenderer.invoke('stage:get-state'),
   addRoot: () => ipcRenderer.invoke('stage:add-root'),
   removeRoot: (dir) => ipcRenderer.invoke('stage:remove-root', dir),
+  addRemote: (spec) => ipcRenderer.invoke('stage:add-remote', spec),
+  refreshRemote: (spec) => ipcRenderer.invoke('stage:refresh-remote', spec),
   select: (dir) => ipcRenderer.invoke('stage:select', dir),
   exportDeck: (dir, kind) => ipcRenderer.invoke('stage:export', dir, kind),
   open: (dir) => ipcRenderer.invoke('stage:open', dir),

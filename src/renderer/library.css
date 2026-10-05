@@ -95,6 +95,18 @@ footer { height: 84px; flex-shrink: 0; background: var(--ink); color: var(--pape
 .device .grow { flex-grow: 1; }
 .device .mono { font-size: 12px; color: var(--muted); }
 
+/* 远端稿库 */
+.rail-gap { margin-top: 10px; }
+.sheet.narrow { width: 560px; }
+.field { width: 100%; margin-top: 10px; height: 40px; padding: 0 12px; border: 1px solid var(--ink); background: var(--paper2); color: var(--ink); font-family: var(--mono); font-size: 14px; outline: none; -webkit-user-select: text; user-select: text; }
+.field:focus { border-color: var(--signal); }
+.form-msg { min-height: 20px; margin-top: 10px; font-size: 13px; color: var(--signal); line-height: 1.6; }
+.form-msg.ok { color: var(--ink); }
+.actions { display: flex; justify-content: flex-end; }
+.nav-item .tagx { margin-left: 6px; font-family: var(--mono); font-size: 10px; letter-spacing: 1px; opacity: .7; }
+.nav-item .x.refresh { margin-right: 6px; }
+.deck .path .remote-note { color: var(--signal); }
+
 /* 新建与编辑面板 */
 .modal { position: fixed; inset: 0; background: rgba(18, 18, 18, 0.55); display: flex; align-items: center; justify-content: center; padding: 40px; }
 .sheet { width: 760px; max-height: 100%; background: var(--paper); border: 1px solid var(--ink); padding: 28px 36px 24px; display: flex; flex-direction: column; gap: 18px; overflow: hidden; }

@@ -9,7 +9,9 @@ const { exportZip, exportPptx, installDownloadHandler } = require('./export');
 const { buildMenu } = require('./menu');
 const skill = require('./skill');
 const { RemoteServer } = require('./remote');
-const { isDir, resolveDeckRoot, readDeckTitle, safeName } = require('./util');
+const { isDir, isDeckDir, resolveDeckRoot, readDeckTitle, safeName } = require('./util');
+const ssh = require('./ssh');
+const { RemoteDecks } = require('./remote-decks');
 
 app.setName('DeckStage');
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -20,6 +22,10 @@ let selectedDir = null;
 let toastText = '';
 const exporting = new Map(); // 稿子目录 -> 正在导出的状态文字
 const pendingUrls = [];
+
+// 远端稿库（SSH）：列表来自扫描缓存，放映 / 导出前再把那一份同步到本机
+const remoteDecks = new RemoteDecks({ onChange: () => pushState() });
+const remoteRoots = (roots) => roots.filter(ssh.isRemote);
 
 // 手机遥控：默认关闭，需要时在稿库里手动开启。放映状态变化时广播给所有已连手机。
 const remote = new RemoteServer({
@@ -45,8 +51,13 @@ function planInfo() {
 function buildState() {
   const cfg = store.read();
   return {
-    roots: cfg.roots.map((dir) => ({ dir, label: path.basename(dir), exists: isDir(dir) })),
-    decks: scanRoots(cfg.roots.filter(isDir)),
+    roots: cfg.roots.map((dir) => (ssh.isRemote(dir)
+      ? { dir, label: ssh.label(ssh.parseRemote(dir)), exists: true, remote: remoteDecks.rootInfo(dir) }
+      : { dir, label: path.basename(dir), exists: isDir(dir) })),
+    decks: [
+      ...scanRoots(cfg.roots.filter((r) => !ssh.isRemote(r) && isDir(r))),
+      ...remoteRoots(cfg.roots).flatMap((spec) => remoteDecks.decks(spec))
+    ].sort((a, b) => b.mtime - a.mtime),
     recent: cfg.recent.map((r) => r.dir),
     selected: selectedDir,
     plan: planInfo(),
@@ -97,6 +108,22 @@ const actions = {
     store.addRoot(r.filePaths[0]);
     pushState();
   },
+  // 添加远端稿库：先连一次确认能连上、目录在，再登记
+  async addRemote(input) {
+    const r = ssh.parseRemote(input);
+    if (!r) return { ok: false, error: '地址格式不对，应为 user@host:/路径 或 ssh://user@host/路径' };
+    const spec = ssh.canonical(r);
+    if (store.read().roots.includes(spec)) return { ok: false, error: '这个远端目录已经登记过了' };
+    try {
+      const count = await ssh.probe(r);
+      store.addRoot(spec);
+      remoteDecks.refresh(spec);
+      pushState();
+      return { ok: true, count };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  },
   showSkills() {
     showLibrary();
     library.webContents.send('stage:show-skills');
@@ -116,7 +143,9 @@ const actions = {
 async function confirmServices({ root, services, fingerprint }) {
   const cfg = store.read();
   if (cfg.trusted && cfg.trusted[root] === fingerprint) return true;
-  const detail = services.map((s) => `• ${s.name}\n   ${s.command.join(' ')}`).join('\n');
+  const own = remoteDecks.owner(root);
+  const origin = own ? `来源：远端主机 ${own.host}（${own.remoteDir}），内容已同步到本机，程序会在本机运行。\n\n` : '';
+  const detail = origin + services.map((s) => `• ${s.name}\n   ${s.command.join(' ')}`).join('\n');
   const r = await dialog.showMessageBox(library && !library.isDestroyed() ? library : undefined, {
     type: 'question',
     buttons: ['允许并记住', '仅本次允许', '不启动'],
@@ -130,13 +159,47 @@ async function confirmServices({ root, services, fingerprint }) {
   return r.response !== 2;
 }
 
+// 远端稿子：用之前先同步到本机。同步失败但本机已有上次的镜像时，问一句要不要用旧的。返回能不能继续
+async function syncRemoteDeck(dir, purpose) {
+  if (!remoteDecks.owner(dir)) return true;
+  exporting.set(dir, '同步远端…');
+  pushState();
+  try {
+    await remoteDecks.sync(dir);
+    return true;
+  } catch (e) {
+    if (isDeckDir(dir)) {
+      const r = await dialog.showMessageBox(library && !library.isDestroyed() ? library : undefined, {
+        type: 'warning',
+        buttons: [`用本机上次的副本${purpose}`, '取消'],
+        defaultId: 1,
+        cancelId: 1,
+        title: '远端同步失败',
+        message: '没能从远端同步最新内容',
+        detail: `${e.message}\n\n本机还有上次同步的副本，但可能不是最新的。`
+      });
+      return r.response === 0;
+    }
+    dialog.showErrorBox('没能同步远端稿子', e.message);
+    return false;
+  } finally {
+    exporting.delete(dir);
+    pushState();
+  }
+}
+
 async function startPresentation(dir) {
   if (presentation) return presentation.notify('正在放映，先结束当前放映');
+  if (exporting.has(dir)) return;
+  if (!(await syncRemoteDeck(dir, '放映'))) return;
+  if (presentation) return;
   const root = resolveDeckRoot(dir);
   if (!root) return dialog.showErrorBox('不是稿子目录', `${dir}\n里面要有 index.html 和 deck.config.js（或 notes.js）。`);
   store.touchRecent(root);
+  const own = remoteDecks.owner(root);
   presentation = new Presentation(root, {
     confirmServices,
+    resync: own ? () => remoteDecks.sync(root) : null,
     onChange: () => { rebuildMenu(); pushState(); remoteBroadcast(); },
     onEnd: () => {
       presentation = null;
@@ -162,6 +225,7 @@ async function startPresentation(dir) {
 
 async function exportDeck(dir, kind) {
   if (exporting.has(dir)) return;
+  if (!(await syncRemoteDeck(dir, '导出'))) return;
   const root = resolveDeckRoot(dir);
   if (!root) return toast('找不到这份稿子');
   const ext = kind === 'zip' ? 'zip' : 'pptx';
@@ -197,6 +261,10 @@ function handleUrl(raw) {
   const target = u.searchParams.get('path');
   switch (u.hostname) {
     case 'add-root': {
+      if (target && ssh.isRemote(target)) {
+        actions.addRemote(target).then((r) => toast(r.ok ? `已登记远端稿库：${ssh.label(ssh.parseRemote(target))}` : `远端稿库没登记上：${r.error}`));
+        break;
+      }
       if (!target || !isDir(target)) return toast('Agent 请求登记的目录不存在');
       store.addRoot(path.resolve(target));
       toast(`已登记稿库目录：${path.basename(target)}`);
@@ -250,7 +318,10 @@ function showLibrary() {
   });
   library.loadFile(path.join(__dirname, 'renderer', 'library.html'));
   library.once('ready-to-show', () => library.show());
-  library.on('focus', pushState); // 回到窗口时重新扫描，skill 刚生成的稿子会自动出现
+  library.on('focus', () => { // 回到窗口时重新扫描，skill 刚生成的稿子会自动出现；远端稿库超过 30 秒没刷新就顺便刷新
+    pushState();
+    remoteDecks.refreshAll(remoteRoots(store.read().roots), { onlyStale: true });
+  });
   library.on('closed', () => { library = null; if (!presentation) app.quit(); });
 }
 
@@ -275,11 +346,16 @@ ipcMain.on('stage:prefs-set', (e, p) => {
 });
 ipcMain.handle('stage:get-state', () => buildState());
 ipcMain.handle('stage:add-root', () => actions.addRootDialog());
-ipcMain.handle('stage:remove-root', (_e, dir) => { store.removeRoot(dir); pushState(); });
+ipcMain.handle('stage:remove-root', (_e, dir) => { store.removeRoot(dir); if (ssh.isRemote(dir)) remoteDecks.forget(dir); pushState(); });
+ipcMain.handle('stage:add-remote', (_e, input) => actions.addRemote(input));
+ipcMain.handle('stage:refresh-remote', (_e, spec) => { remoteDecks.refreshAll(spec ? [spec] : remoteRoots(store.read().roots)); });
 ipcMain.handle('stage:select', (_e, dir) => { selectedDir = dir; });
 ipcMain.handle('stage:export', (_e, dir, kind) => exportDeck(dir, kind));
 ipcMain.handle('stage:open', (_e, dir) => startPresentation(dir));
-ipcMain.handle('stage:reveal', (_e, dir) => shell.showItemInFolder(dir));
+ipcMain.handle('stage:reveal', (_e, dir) => {
+  if (remoteDecks.owner(dir) && !isDeckDir(dir)) return toast('这份远端稿子还没同步到本机，放映或导出一次就会同步');
+  shell.showItemInFolder(dir);
+});
 ipcMain.handle('stage:reveal-skill', () => shell.showItemInFolder(skill.skillDir()));
 ipcMain.handle('stage:remote-get', () => remote.info());
 ipcMain.handle('stage:remote-toggle', async (_e, on) => {
@@ -306,8 +382,10 @@ app.whenReady().then(() => {
   // 开发模式没有打包图标，手动设置 dock 图标
   if (!app.isPackaged && app.dock) app.dock.setIcon(path.join(__dirname, '..', 'build', 'icon.png'));
   installDownloadHandler();
+  remoteDecks.load();
   rebuildMenu();
   showLibrary();
+  remoteDecks.refreshAll(remoteRoots(store.read().roots));
   handleArgv(process.argv);
   for (const u of pendingUrls.splice(0)) handleUrl(u);
 });

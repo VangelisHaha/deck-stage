@@ -13,8 +13,9 @@ const sameRect = (a, b) => a.x === b.x && a.y === b.y && a.width === b.width && 
 const BG = { audience: '#000000', presenter: '#0F0F0E' };
 
 class Presentation {
-  constructor(root, { onEnd, onChange, confirmServices }) {
+  constructor(root, { onEnd, onChange, confirmServices, resync }) {
     this.root = root;
+    this.resync = resync || null; // 远端稿子：把最新内容同步到本机的函数
     this.services = new Services(root, { confirm: confirmServices, notify: (m) => this.notify(m) });
     this.onEnd = onEnd;
     this.onChange = onChange;
@@ -286,7 +287,15 @@ class Presentation {
 
   // ---------- 重载 / 热刷新 / 导出 ----------
 
-  reload() {
+  // 远端稿子：重载前先同步一次；同步失败就用本机现有的副本，不打断放映
+  async reload() {
+    if (this.resync) {
+      try { await this.resync(); } catch (e) { this.notify(`远端同步失败，继续用本机副本：${e.message}`); }
+    }
+    this.reloadWindows();
+  }
+
+  reloadWindows() {
     for (const win of [this.audience, this.presenter]) {
       if (win && !win.isDestroyed()) win.webContents.reloadIgnoringCache();
     }
@@ -299,7 +308,7 @@ class Presentation {
       this.watcher = fs.watch(this.root, { recursive: true }, (_ev, name) => {
         if (name && /(^|\/)(lib|node_modules|\.git)(\/|$)/.test(name)) return;
         clearTimeout(this.watchTimer);
-        this.watchTimer = setTimeout(() => this.reload(), 300);
+        this.watchTimer = setTimeout(() => this.reloadWindows(), 300);
       });
     } catch (e) { /* 监听失败不影响放映 */ }
   }

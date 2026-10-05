@@ -38,6 +38,8 @@ DeckStage 已登记的稿库目录：
 ${rootList}
 新稿子建在其中一个目录下。如果要用新的目录，先问我，我同意后执行：
 open "deckstage://add-root?path=<目录绝对路径，需 URL 编码>"
+稿库里形如 ssh://user@host/路径 的是远端目录（稿子在另一台机器上）：DeckStage 放映和导出前会用 rsync 同步到本机，你在远端机器上建稿、改稿即可。登记远端目录同样用 add-root，path 填 ssh://user@host/绝对路径（需 URL 编码）。
+如果你自己就跑在远端机器上，没法执行本机的 open 命令，请让我在稿库里点「添加远端目录」，你只管把稿子建在那个目录下。
 
 5. 在 DeckStage 里打开
 稿子改完、体检通过后，执行下面的命令，DeckStage 会在稿库里选中这份稿子（不会自动开始放映）：

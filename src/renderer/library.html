@@ -20,6 +20,7 @@
     </div>
     <button id="openRemote" class="remote-btn"><span id="remoteDot" class="dot"></span><span id="remoteText">手机遥控 · 关</span></button>
     <button id="addRoot" class="link-paper">+ 添加稿库目录</button>
+    <button id="addRemoteRoot" class="link-paper rail-gap">+ 添加远端目录（SSH）</button>
   </aside>
 
   <main>
@@ -35,6 +36,25 @@
       <button id="play" class="play">开始放映　⏎</button>
     </footer>
   </main>
+</div>
+
+<div id="addRemote" class="modal" hidden>
+  <div class="sheet narrow">
+    <div class="sheet-head">
+      <div>
+        <h2>添加远端目录</h2>
+        <p class="muted">稿子在另一台 Linux / Mac 上时，填 SSH 地址。放映和导出前会自动同步到本机，之后和本地稿子一样用。</p>
+      </div>
+      <button id="closeAddRemote" class="link-ink">关闭 Esc</button>
+    </div>
+    <section>
+      <div class="row-head"><span class="label ink">SSH 地址</span></div>
+      <input id="remoteSpec" class="field" type="text" placeholder="user@host:/path/to/decks" spellcheck="false" autocomplete="off">
+      <p class="muted small">也可以写 ~/.ssh/config 里的别名（如 dev:/data/decks）或 ssh://user@host:2222/路径。需要免密登录（密钥或 ssh-agent），不会弹出密码输入。</p>
+      <div id="remoteMsg" class="form-msg"></div>
+    </section>
+    <div class="actions"><button id="submitRemote" class="play small-btn">连接并添加</button></div>
+  </div>
 </div>
 
 <div id="skills" class="modal" hidden>

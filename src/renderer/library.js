@@ -43,7 +43,16 @@
     nav.appendChild(item('all', '全部', state.decks.length).b);
     for (const r of state.roots) {
       const count = state.decks.filter((d) => d.root === r.dir).length;
-      const { b, right } = item(r.dir, r.label + (r.exists ? '' : '（找不到）'), count, true);
+      const rm = r.remote;
+      const note = !r.exists ? '（找不到）' : rm && rm.loading ? '（连接中…）' : rm && rm.error ? '（连不上）' : '';
+      const { b, right } = item(r.dir, r.label + note, count, true);
+      if (rm) {
+        b.title = rm.error ? `SSH ${rm.host}：${rm.error}` : `SSH ${rm.host}`;
+        const re = el('span', 'x refresh', '↻');
+        re.title = '重新扫描这个远端稿库';
+        re.onclick = (e) => { e.stopPropagation(); window.stage.refreshRemote(r.dir); };
+        right.appendChild(re);
+      }
       const x = el('span', 'x', '×');
       x.title = '移除这个稿库目录（不删文件）';
       x.onclick = (e) => { e.stopPropagation(); if (filter === r.dir) filter = 'all'; window.stage.removeRoot(r.dir); };
@@ -66,7 +75,9 @@
       row.appendChild(el('div', 'idx', pad2(ep ? ep[1] : i + 1)));
       const main = el('div', 'main');
       main.appendChild(el('div', 'title', d.title));
-      main.appendChild(el('div', 'path', [d.group, d.rel].filter(Boolean).join(' / ')));
+      const pathLine = el('div', 'path', [d.remote ? 'SSH' : '', d.group, d.rel].filter(Boolean).join(' / '));
+      if (d.remote) pathLine.appendChild(el('span', 'remote-note', d.remote.cached ? '  · 已缓存' : '  · 未同步'));
+      main.appendChild(pathLine);
       row.appendChild(main);
       const meta = el('div', 'meta');
       meta.appendChild(document.createTextNode(ep ? `第 ${ep[1]} 期` : ''));
@@ -90,6 +101,9 @@
       list.appendChild(row);
     });
 
+    for (const r of state.roots) {
+      if (r.remote && r.remote.error && (filter === 'all' || filter === r.dir)) list.appendChild(el('div', 'empty', `远端 ${r.remote.host} 连不上：${r.remote.error}。下面是上次扫描到的稿子（已同步过的仍可放映）。`));
+    }
     if (!decks.length) {
       let msg = '没有匹配的稿子。';
       if (!state.roots.length) msg = '还没有登记稿库目录。点左下角「+ 添加稿库目录」，选择放稿子的文件夹。';
@@ -197,6 +211,30 @@
 
   $('q').addEventListener('input', (e) => { query = e.target.value; renderList(); renderBar(); });
   $('addRoot').onclick = () => window.stage.addRoot();
+  function showAddRemote(on) {
+    $('addRemote').hidden = !on;
+    if (on) { $('remoteMsg').textContent = ''; $('remoteMsg').className = 'form-msg'; $('remoteSpec').focus(); }
+  }
+  async function submitRemote() {
+    const spec = $('remoteSpec').value.trim();
+    const msg = $('remoteMsg');
+    if (!spec) return;
+    const btn = $('submitRemote');
+    btn.disabled = true;
+    btn.textContent = '连接中…';
+    msg.className = 'form-msg';
+    msg.textContent = '';
+    const r = await window.stage.addRemote(spec);
+    btn.disabled = false;
+    btn.textContent = '连接并添加';
+    if (r.ok) { $('remoteSpec').value = ''; showAddRemote(false); filter = 'all'; refresh(); }
+    else msg.textContent = r.error;
+  }
+  $('addRemoteRoot').onclick = () => showAddRemote(true);
+  $('closeAddRemote').onclick = () => showAddRemote(false);
+  $('addRemote').addEventListener('click', (e) => { if (e.target === $('addRemote')) showAddRemote(false); });
+  $('submitRemote').onclick = submitRemote;
+  $('remoteSpec').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitRemote(); });
   $('openSkills').onclick = () => showSkills(true);
   $('closeSkills').onclick = () => showSkills(false);
   $('openRemote').onclick = () => showRemote(true);
@@ -213,9 +251,9 @@
   $('reveal').onclick = () => { if (selected) window.stage.reveal(selected); };
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { if (!$('remote').hidden) showRemote(false); else if (!$('skills').hidden) showSkills(false); else if (query) { $('q').value = ''; query = ''; renderList(); renderBar(); } return; }
+    if (e.key === 'Escape') { if (!$('addRemote').hidden) showAddRemote(false); else if (!$('remote').hidden) showRemote(false); else if (!$('skills').hidden) showSkills(false); else if (query) { $('q').value = ''; query = ''; renderList(); renderBar(); } return; }
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); $('q').focus(); return; }
-    if (!$('skills').hidden || !$('remote').hidden || document.activeElement === $('q') && e.key !== 'Enter' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    if (!$('skills').hidden || !$('remote').hidden || !$('addRemote').hidden || document.activeElement === $('q') && e.key !== 'Enter' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
     const decks = visibleDecks();
     const i = decks.findIndex((d) => d.dir === selected);
     if (e.key === 'ArrowDown' && i < decks.length - 1) { e.preventDefault(); selected = decks[i + 1].dir; window.stage.select(selected); renderList(); renderBar(); }

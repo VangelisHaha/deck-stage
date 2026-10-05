@@ -53,6 +53,16 @@ DeckStage 的行为：
 - 服务脚本里不要写死群 id、webhook、密钥：这些放配置文件，且配置文件不随稿子分发（见 `workflow.md` 的脱敏）。
 - 页面里的按钮要处理「服务没起」：进页时探测 `/health`，失败就提示，而不是点了才报错。
 
+## 远端稿库（稿子在另一台机器上）
+
+稿子可以放在远端的 Linux / Mac 上，DeckStage 通过 SSH 访问：
+
+- 稿库里的「添加远端目录（SSH）」，填 `user@host:/路径`、`ssh://user@host:2222/路径` 或 `~/.ssh/config` 里的别名（如 `dev:/data/decks`）。需要免密登录（密钥或 ssh-agent），不弹密码。
+- 放映和导出前，DeckStage 用 rsync 把那一份稿子同步到本机缓存再放，所以 **Agent 在远端建稿、改稿时不需要做任何特殊处理**，保持稿子目录结构不变（`index.html` + `deck.config.js` / `notes.js`）即可。
+- 本机 Agent 可以执行 `open "deckstage://add-root?path=ssh%3A%2F%2Fuser%40host%2Fpath"` 登记远端目录；跑在远端的 Agent 没法执行本机的 `open`，让用户在界面里添加。
+- 稿子里有 `deckstage.json` 要启动后台服务时，同步到本机后在本机运行（信任弹窗会标明来源主机）。服务脚本要能在用户本机跑，不要依赖远端才有的路径、凭证或软件。
+- 同步会排除 `node_modules` 和 `.git`。图片、视频等大文件首次同步会慢，之后只传变化的部分。
+
 ## 演讲者窗口的交互（DeckStage 提供，稿子不用做任何事）
 
 演讲者窗口的布局、目录、光点和划线都由 DeckStage 在放映时叠加，只依赖骨架固有的结构（`#pv`、`#pvBody`、`#slides > .slide[data-t]`、`#dots`），旧稿子同样生效。所以：
