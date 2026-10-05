@@ -40,7 +40,10 @@ function addEndButton() {
 const INK_COLOR = '#FF4F1F';
 const INK_WAIT = 3000; // 笔迹停留，之后淡出
 const INK_FADE = 600;
-const DOT_TTL = 5000;  // 光点长时间没收到消息就收起，防止对端异常时残留
+const DOT_TTL = 5000;
+// 食指指向的手形（24×24 网格，来自 Lucide「pointer」图标，ISC 许可），指尖在 HAND_TIP
+const HAND_TIP = [8, 2];
+const HAND = new Path2D('M22 14a8 8 0 0 1-8 8 M18 11v-1a2 2 0 0 0-2-2a2 2 0 0 0-2 2 M14 10V9a2 2 0 0 0-2-2a2 2 0 0 0-2 2v1 M10 9.5V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v10 M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15');  // 光点长时间没收到消息就收起，防止对端异常时残留
 
 function makeInk(canvas, getRect) {
   const ctx = canvas.getContext('2d');
@@ -88,15 +91,23 @@ function makeInk(canvas, getRect) {
     if (dot) {
       alive = true;
       const [x, y] = at([dot.x, dot.y]);
-      const rad = Math.max(7, r.width * 0.009);
-      ctx.shadowColor = 'rgba(255,79,31,.8)';
-      ctx.shadowBlur = rad * 1.8;
+      const size = Math.max(34, r.width * 0.034);
+      const k = size / 24;
+      ctx.save();
+      ctx.translate(x - HAND_TIP[0] * k, y - HAND_TIP[1] * k); // 指尖对准真实位置
+      ctx.scale(k, k);
+      ctx.shadowColor = 'rgba(0,0,0,.45)';
+      ctx.shadowBlur = size * 0.25;
+      ctx.shadowOffsetY = size * 0.06;
       ctx.fillStyle = INK_COLOR;
-      ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill();
-      ctx.shadowBlur = 0;
+      ctx.fill(HAND);
+      ctx.shadowColor = 'transparent';
       ctx.strokeStyle = '#fff';
-      ctx.lineWidth = Math.max(2, rad * 0.28);
-      ctx.stroke();
+      ctx.lineWidth = 1.5;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.stroke(HAND);
+      ctx.restore();
     }
     if (alive) raf = requestAnimationFrame(frame);
   }
@@ -154,10 +165,11 @@ const PV_CSS = `
 #ps-split:hover::after, #ps-split.drag::after { width: 3px; left: 2px; background: #FF4F1F; }
 #ps-right { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 #ps-right #pvBody { font-size: calc(var(--ps-font, 19) * 1px) !important; }
-#ps-next { flex: none; padding: 8px 16px 12px; border-top: 1px solid var(--line, #222); }
+#ps-next { flex: none; display: flex; gap: 12px; padding: 8px 16px 12px; border-top: 1px solid var(--line, #222); }
+#ps-next .nb { flex: 1; min-width: 0; max-width: 300px; }
 #pv.lay-stage #ps-next { display: none; }
-#ps-next .cap { font: 11px "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .04em; color: var(--ink4, #888); margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#ps-next .box { position: relative; overflow: hidden; width: min(100%, 400px); aspect-ratio: 16 / 9; border: 1px solid var(--line2, #333); background: var(--bg0, #0F0F0E); }
+#ps-next .cap { cursor: default; font: 11px "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .04em; color: var(--ink4, #888); margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ps-next .box { position: relative; overflow: hidden; width: 100%; aspect-ratio: 16 / 9; border: 1px solid var(--line2, #333); background: var(--bg0, #0F0F0E); }
 #ps-next .mini { position: absolute; left: 0; top: 0; width: var(--deck-w, 1600px); height: var(--deck-h, 900px); transform-origin: 0 0; pointer-events: none; }
 #ps-next .mini > .slide { display: flex !important; }
 #ps-next .mini .an { animation: none !important; }
@@ -171,7 +183,12 @@ const PV_CSS = `
 #ps-hud.on { opacity: 1; }
 #ps-toc { position: absolute; z-index: 110; left: 14px; top: 12px; bottom: 8px; width: min(300px, 70%); display: none; flex-direction: column; background: #0F0F0E; border: 1px solid var(--line2, #333); box-shadow: 0 8px 28px rgba(0,0,0,.5); }
 #ps-toc.on { display: flex; }
-#ps-toc .hd { flex: none; padding: 9px 12px; border-bottom: 1px solid var(--line2, #333); font: 11px "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .08em; color: var(--ink4, #888); }
+#ps-toc .hd { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 8px 8px 8px 12px; font: 11px "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .08em; color: var(--ink4, #888); }
+#ps-toc .hd button { border: 0; background: transparent; color: var(--ink3, #aaa); font-size: 13px; cursor: pointer; padding: 2px 6px; }
+#ps-toc .hd button:hover { color: #FF4F1F; }
+#ps-toc input { flex: none; margin: 0 10px 8px; height: 32px; padding: 0 10px; background: rgba(255,255,255,.05); border: 1px solid var(--line2, #333); border-radius: 0; color: var(--ink, #eee); font: 14px "SF Mono", ui-monospace, Menlo, monospace; outline: none; }
+#ps-toc input:focus { border-color: #FF4F1F; }
+#ps-toc li[hidden] { display: none; }
 #ps-toc ol { flex: 1; margin: 0; padding: 4px 0; list-style: none; overflow-y: auto; }
 #ps-toc li { display: flex; gap: 10px; padding: 7px 12px; cursor: pointer; font-size: 14px; line-height: 1.4; color: var(--ink2, #ccc); border-left: 3px solid transparent; }
 #ps-toc li i { flex: none; width: 24px; font: normal 12px "SF Mono", ui-monospace, Menlo, monospace; color: var(--ink4, #888); padding-top: 1px; }
@@ -208,11 +225,18 @@ function initPresenter(styleEl) {
   const splitter = el('div', 'ps-split');
   const right = el('div', 'ps-right');
   const next = el('div', 'ps-next');
-  const nextCap = el('div', null, 'cap');
-  const nextBox = el('div', null, 'box');
-  const nextMini = el('div', null, 'mini');
-  nextBox.appendChild(nextMini);
-  next.append(nextCap, nextBox);
+  const mkNb = () => {
+    const nb = el('div', null, 'nb');
+    const cap = el('div', null, 'cap');
+    const bx = el('div', null, 'box');
+    const mini = el('div', null, 'mini');
+    bx.appendChild(mini);
+    nb.append(cap, bx);
+    return { nb, cap, bx, mini };
+  };
+  const prevNb = mkNb();
+  const nextNb = mkNb();
+  next.append(prevNb.nb, nextNb.nb);
   box.appendChild(inkCanvas);
   area.append(box, toc, hud);
   left.append(area, bar);
@@ -237,11 +261,11 @@ function initPresenter(styleEl) {
     box.style.width = Math.floor(W * k) + 'px';
     box.style.height = Math.floor(H * k) + 'px';
     box.style.setProperty('--ps-k', String(k));
-    const nk = nextBox.clientWidth / W;
-    nextMini.style.transform = `scale(${nk})`;
+    for (const n of [prevNb, nextNb]) n.mini.style.transform = `scale(${n.bx.clientWidth / W})`;
   };
   new ResizeObserver(fit).observe(area);
-  new ResizeObserver(fit).observe(nextBox);
+  new ResizeObserver(fit).observe(prevNb.bx);
+  new ResizeObserver(fit).observe(nextNb.bx);
 
   const applyPrefs = () => {
     pv.style.setProperty('--ps-split', String(split));
@@ -312,55 +336,105 @@ function initPresenter(styleEl) {
   const curIndex = () => slideEls().findIndex((s) => s.classList.contains('on'));
   const goTo = (i) => { const d = document.querySelectorAll('#dots > i')[i]; if (d) d.click(); };
 
-  // ---- 目录 ----
+  // ---- 目录（带搜索；点选或回车跳转后保持打开，用 G 或 ✕ 收起）----
   let tocOpen = false;
   let tocSel = 0;
   let tocCount = -1;
+  let tocQuery = '';
+  const tocInput = el('input');
+  tocInput.type = 'text';
+  tocInput.placeholder = '输入页码或标题，如 11';
+  tocInput.spellcheck = false;
+  tocInput.autocomplete = 'off';
+  const tocList = el('ol');
+  const visibleItems = () => Array.from(tocList.children).filter((li) => !li.hidden);
   const buildToc = () => {
     const slides = slideEls();
     tocCount = slides.length;
     toc.textContent = '';
+    tocList.textContent = '';
     const hd = el('div', null, 'hd');
-    hd.textContent = '目录 · ↑↓ 选择 · 回车跳转 · G 收起';
-    const ol = el('ol');
+    const hint = el('span');
+    hint.textContent = '目录 · 回车跳转 · G 收起';
+    const close = el('button');
+    close.type = 'button';
+    close.textContent = '✕';
+    close.addEventListener('click', () => toggleToc(false));
+    hd.append(hint, close);
     slides.forEach((s, i) => {
       const li = el('li');
+      li.dataset.i = String(i);
+      li.dataset.q = `${i + 1} ${String(i + 1).padStart(2, '0')} ${s.dataset.t || ''}`.toLowerCase();
       const n = el('i'); n.textContent = String(i + 1).padStart(2, '0');
       li.append(n, document.createTextNode(s.dataset.t || `第 ${i + 1} 页`));
-      li.addEventListener('click', () => { goTo(i); toggleToc(false); });
-      ol.appendChild(li);
+      li.addEventListener('click', () => goTo(i));
+      tocList.appendChild(li);
     });
-    toc.append(hd, ol);
+    toc.append(hd, tocInput, tocList);
+    filterToc();
+  };
+  // 数字按页码前缀匹配（11 → 第 11、110 页），其余按标题包含匹配
+  const filterToc = () => {
+    const q = tocQuery.trim().toLowerCase();
+    Array.from(tocList.children).forEach((li) => {
+      const i = Number(li.dataset.i);
+      li.hidden = !!q && !(/^\d+$/.test(q) ? String(i + 1).startsWith(String(parseInt(q, 10))) : li.dataset.q.includes(q));
+    });
+    const vis = visibleItems();
+    if (!vis.some((li) => Number(li.dataset.i) === tocSel)) tocSel = vis.length ? Number(vis[0].dataset.i) : -1;
+    markToc(curIndex());
   };
   const markToc = (cur) => {
-    toc.querySelectorAll('li').forEach((li, i) => {
+    Array.from(tocList.children).forEach((li) => {
+      const i = Number(li.dataset.i);
       li.classList.toggle('now', i === cur);
       li.classList.toggle('sel', i === tocSel);
-      if (i === tocSel) li.scrollIntoView({ block: 'nearest' });
+      if (i === tocSel && !li.hidden) li.scrollIntoView({ block: 'nearest' });
     });
   };
+  const moveSel = (d) => {
+    const vis = visibleItems().map((li) => Number(li.dataset.i));
+    if (!vis.length) return;
+    const at = Math.max(0, vis.indexOf(tocSel));
+    tocSel = vis[Math.max(0, Math.min(vis.length - 1, at + d))];
+    markToc(curIndex());
+  };
+  const jumpSel = () => { if (tocSel >= 0) goTo(tocSel); };
+  tocInput.addEventListener('input', () => { tocQuery = tocInput.value; filterToc(); });
+  tocInput.addEventListener('focus', () => ipcRenderer.send('stage:typing', true));
+  tocInput.addEventListener('blur', () => ipcRenderer.send('stage:typing', false));
   function toggleToc(force) {
     tocOpen = force == null ? !tocOpen : !!force;
     if (tocOpen && tocCount !== slideEls().length) buildToc();
-    tocSel = Math.max(0, curIndex());
     toc.classList.toggle('on', tocOpen);
     tocBtn.classList.toggle('on', tocOpen);
-    if (tocOpen) markToc(curIndex());
+    if (tocOpen) {
+      tocQuery = ''; tocInput.value = '';
+      tocSel = Math.max(0, curIndex());
+      filterToc();
+      tocInput.focus();
+    } else {
+      tocInput.blur();
+    }
   }
 
-  // ---- 下一页预览 ----
-  const renderNext = (cur) => {
+  // ---- 上一页 / 下一页预览 ----
+  const renderOne = (nb, label, idx, emptyText) => {
     const slides = slideEls();
-    nextMini.textContent = '';
-    const s = slides[cur + 1];
-    if (!s) { nextCap.textContent = '已是最后一页'; return; }
-    nextCap.textContent = `下一页 · ${String(cur + 2).padStart(2, '0')} ${s.dataset.t || ''}`;
-    const c = s.cloneNode(true);
+    nb.mini.textContent = '';
+    const sl = slides[idx];
+    if (!sl) { nb.cap.textContent = emptyText; return; }
+    nb.cap.textContent = `${label} · ${String(idx + 1).padStart(2, '0')} ${sl.dataset.t || ''}`;
+    const c = sl.cloneNode(true);
     c.classList.add('on');
     c.removeAttribute('data-t');
     c.querySelectorAll('[id]').forEach((n) => n.removeAttribute('id'));
     c.querySelectorAll('.an').forEach((n) => { n.style.animation = 'none'; });
-    nextMini.appendChild(c);
+    nb.mini.appendChild(c);
+  };
+  const renderNeighbors = (cur) => {
+    renderOne(prevNb, '上一页', cur - 1, '已是第一页');
+    renderOne(nextNb, '下一页', cur + 1, '已是最后一页');
     fit();
   };
 
@@ -428,8 +502,8 @@ function initPresenter(styleEl) {
     if (i === lastIdx || i < 0) return;
     lastIdx = i;
     clearInk();
-    renderNext(i);
-    if (tocOpen) { tocSel = i; markToc(i); }
+    renderNeighbors(i);
+    if (tocOpen && !tocQuery) { tocSel = i; markToc(i); } else if (tocOpen) markToc(i);
   };
   window.addEventListener('hashchange', onTick);
   setInterval(onTick, 150);
@@ -447,6 +521,13 @@ function initPresenter(styleEl) {
   window.addEventListener('keydown', (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (e.target === tocInput) { // 在搜索框里打字：按键不能漏给稿子翻页
+      e.stopImmediatePropagation();
+      if (k === 'ArrowDown') { e.preventDefault(); moveSel(1); }
+      else if (k === 'ArrowUp') { e.preventDefault(); moveSel(-1); }
+      else if (k === 'Enter') { e.preventDefault(); jumpSel(); tocQuery = ''; tocInput.value = ''; filterToc(); }
+      return;
+    }
     if (/^[0-9]$/.test(k)) { eat(e); digits = (digits + k).slice(0, 3); showDigits(); return; }
     if (digits && k === 'Enter') {
       eat(e);
@@ -456,13 +537,8 @@ function initPresenter(styleEl) {
       return;
     }
     if (digits && k === 'Backspace') { eat(e); digits = digits.slice(0, -1); showDigits(); return; }
-    if (tocOpen && (k === 'ArrowUp' || k === 'ArrowDown')) {
-      eat(e);
-      tocSel = Math.max(0, Math.min(tocCount - 1, tocSel + (k === 'ArrowDown' ? 1 : -1)));
-      markToc(curIndex());
-      return;
-    }
-    if (tocOpen && k === 'Enter') { eat(e); goTo(tocSel); toggleToc(false); return; }
+    if (tocOpen && (k === 'ArrowUp' || k === 'ArrowDown')) { eat(e); moveSel(k === 'ArrowDown' ? 1 : -1); return; }
+    if (tocOpen && k === 'Enter') { eat(e); jumpSel(); return; }
     switch (k) {
       case 'g': eat(e); toggleToc(); break;
       case 'l': eat(e); cycleLayout(); break;

@@ -51,7 +51,7 @@ class Presentation {
     this.audience = this.makeWindow('audience', `${this.server.origin}/index.html`);
     this.presenter = this.makeWindow('presenter', `${this.server.origin}/index.html?notes=1`);
     this.audience.on('closed', () => this.end());
-    this.presenter.on('closed', () => { this.presenter = null; this.onChange(); });
+    this.presenter.on('closed', () => { this.presenter = null; this.typing = false; this.onChange(); });
 
     this.applyTarget(this.target, { manual: false });
     this.audience.once('ready-to-show', () => this.audience.show());
@@ -96,7 +96,7 @@ class Presentation {
   reopenPresenter() {
     if (this.presenter) return this.presenter.focus();
     this.presenter = this.makeWindow('presenter', `${this.server.origin}/index.html?notes=1`);
-    this.presenter.on('closed', () => { this.presenter = null; this.onChange(); });
+    this.presenter.on('closed', () => { this.presenter = null; this.typing = false; this.onChange(); });
     this.placePresenter();
     this.presenter.once('ready-to-show', () => { this.presenter.show(); this.presenter.focus(); });
     this.onChange();
@@ -231,6 +231,7 @@ class Presentation {
 
   onKey(e, input) {
     if (input.type !== 'keyDown' || input.meta || input.control || input.alt) return;
+    if (this.typing && input.key.toLowerCase() !== 'escape') return;
     switch (input.key.toLowerCase()) {
       case 'f': e.preventDefault(); this.toggleFullscreen(); break;
       case 'd': e.preventDefault(); this.nextDisplay(); break;
