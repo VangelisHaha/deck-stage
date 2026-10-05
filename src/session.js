@@ -2,7 +2,7 @@
 // 一次放映：内置服务 + 观众窗口 + 演讲者窗口 + 投屏布局 + 防息屏 + 可选热刷新。
 const fs = require('fs');
 const path = require('path');
-const { BrowserWindow, Notification, app, powerSaveBlocker, screen, session, shell } = require('electron');
+const { BrowserWindow, Notification, powerSaveBlocker, screen, session } = require('electron');
 const { startServer } = require('./server');
 const { fitWindow16x9, stablePort, readDeckTitle } = require('./util');
 
@@ -376,13 +376,4 @@ class Presentation {
   }
 }
 
-// 导出 PPTX 等下载：直接存到「下载」目录，完成后在 Finder 里定位
-function installDownloadHandler() {
-  session.defaultSession.on('will-download', (_e, item) => {
-    const target = path.join(app.getPath('downloads'), item.getFilename());
-    item.setSavePath(target);
-    item.once('done', (_ev, state) => { if (state === 'completed') shell.showItemInFolder(target); });
-  });
-}
-
-module.exports = { Presentation, installDownloadHandler };
+module.exports = { Presentation };

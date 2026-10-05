@@ -4,11 +4,12 @@ const path = require('path');
 const { app, BrowserWindow, Menu, clipboard, dialog, ipcMain, screen, shell } = require('electron');
 const store = require('./store');
 const { scanRoots } = require('./library');
-const { Presentation, installDownloadHandler } = require('./session');
+const { Presentation } = require('./session');
+const { exportZip, exportPptx, installDownloadHandler } = require('./export');
 const { buildMenu } = require('./menu');
 const skill = require('./skill');
 const { RemoteServer } = require('./remote');
-const { isDir, resolveDeckRoot } = require('./util');
+const { isDir, resolveDeckRoot, readDeckTitle, safeName } = require('./util');
 
 app.setName('DeckStage');
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -17,6 +18,7 @@ let library = null;
 let presentation = null;
 let selectedDir = null;
 let toastText = '';
+const exporting = new Map(); // 稿子目录 -> 正在导出的状态文字
 const pendingUrls = [];
 
 // 手机遥控：默认关闭，需要时在稿库里手动开启。放映状态变化时广播给所有已连手机。
@@ -49,6 +51,7 @@ function buildState() {
     selected: selectedDir,
     plan: planInfo(),
     presenting: !!presentation,
+    exporting: Object.fromEntries(exporting),
     remote: remote.summary(),
     toast: toastText,
     skills: {
@@ -135,6 +138,36 @@ async function startPresentation(dir) {
   }
 }
 
+// ---------- 导出（稿库里每一行的 ZIP / PPTX） ----------
+
+async function exportDeck(dir, kind) {
+  if (exporting.has(dir)) return;
+  const root = resolveDeckRoot(dir);
+  if (!root) return toast('找不到这份稿子');
+  const ext = kind === 'zip' ? 'zip' : 'pptx';
+  const pick = await dialog.showSaveDialog(library, {
+    title: kind === 'zip' ? '导出 ZIP' : '导出 PPTX',
+    defaultPath: path.join(app.getPath('downloads'), `${safeName(readDeckTitle(root))}.${ext}`),
+    filters: [{ name: ext.toUpperCase(), extensions: [ext] }]
+  });
+  if (pick.canceled || !pick.filePath) return;
+
+  const label = kind === 'zip' ? 'ZIP' : 'PPTX';
+  const set = (text) => { exporting.set(dir, text); pushState(); };
+  set(`导出 ${label}…`);
+  try {
+    if (kind === 'zip') await exportZip(root, pick.filePath);
+    else await exportPptx(root, pick.filePath, (t) => set(t));
+    shell.showItemInFolder(pick.filePath);
+    toast(`已导出：${path.basename(pick.filePath)}`);
+  } catch (e) {
+    toast(`导出失败：${e && e.message ? e.message : e}`);
+  } finally {
+    exporting.delete(dir);
+    pushState();
+  }
+}
+
 // ---------- deckstage:// 协议：Agent 通过 `open "deckstage://…"` 和本应用互动 ----------
 
 function handleUrl(raw) {
@@ -209,6 +242,7 @@ ipcMain.handle('stage:get-state', () => buildState());
 ipcMain.handle('stage:add-root', () => actions.addRootDialog());
 ipcMain.handle('stage:remove-root', (_e, dir) => { store.removeRoot(dir); pushState(); });
 ipcMain.handle('stage:select', (_e, dir) => { selectedDir = dir; });
+ipcMain.handle('stage:export', (_e, dir, kind) => exportDeck(dir, kind));
 ipcMain.handle('stage:open', (_e, dir) => startPresentation(dir));
 ipcMain.handle('stage:reveal', (_e, dir) => shell.showItemInFolder(dir));
 ipcMain.handle('stage:reveal-skill', () => shell.showItemInFolder(skill.skillDir()));

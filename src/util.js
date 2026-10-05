@@ -66,6 +66,11 @@ function stablePort(seed, base = 18000, span = 1000) {
   return base + (h % span);
 }
 
+// 标题转文件名：去掉系统不允许的字符
+function safeName(name) {
+  return String(name).replace(/[\\/:*?"<>|\x00-\x1f]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 80) || 'deck';
+}
+
 const pad2 = (n) => String(n).padStart(2, '0');
 
 function formatTime(ms, now = new Date()) {
@@ -110,7 +115,7 @@ function uaLabel(ua = '') {
 }
 
 module.exports = {
-  lanAddresses, uaLabel,
+  lanAddresses, uaLabel, safeName,
   expandHome, isDir, isDeckDir, resolveDeckRoot, readDeckTitle, deckLabel,
   latestMtime, stablePort, formatTime, fitWindow16x9
 };

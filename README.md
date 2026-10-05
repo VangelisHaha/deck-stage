@@ -6,6 +6,18 @@
 
 DeckStage 是一个 macOS 放映应用，配一个给 Agent 用的 skill。Agent 用 HTML 写演示稿，DeckStage 负责把它放出来：无浏览器痕迹、双屏、演讲者视图、手机遥控、投屏友好。
 
+## 长什么样
+
+示例稿在 [`examples/hello-deck`](examples/hello-deck)，下面的截图都来自它。
+
+| 稿库 | 观众窗口（投出去的画面） |
+|---|---|
+| ![稿库](docs/screenshots/library.png) | ![观众窗口](docs/screenshots/audience.png) |
+
+| 演讲者窗口（只你看见） | 手机遥控（浏览器，免安装） |
+|---|---|
+| ![演讲者窗口](docs/screenshots/presenter.png) | <img src="docs/screenshots/phone-remote.png" width="260" alt="手机遥控"> |
+
 ## 为什么不用 PPT
 
 让 Agent 做 `.pptx`，常见的体验是这样的：
@@ -39,6 +51,7 @@ HTML 稿直接用浏览器放映有几个很烦的问题，DeckStage 就是解�
 - **投屏**：插上 HDMI 自动把观众窗口全屏到外接屏；单屏开会用窗口模式，在飞书里共享这个窗口，演讲者窗口不会被拍到
 - **手机遥控**：手机浏览器扫码，就能翻页、看台词、跳页、黑屏，不用装 App
 - **稿库**：登记几个目录，自动扫描里面的稿子，选中回车就放
+- **导出分享**：稿库里每份稿子一键导出 ZIP（整个目录，对方用浏览器或 DeckStage 都能放）或 PPTX（逐页截图，发给用 PowerPoint 的人）
 - **不会缓存**：内置静态服务，所有响应都带 `no-store`
 - **放映期间不息屏**
 - **Agent 友好**：配套 skill 随应用打包，复制一段提示词给 Agent 就能装好；Agent 用 `deckstage://` 链接和应用互动
@@ -62,6 +75,8 @@ npm run install-app     # 打包并安装到 /Applications/DeckStage.app
 2. 对 Agent 说「做一份关于 xxx 的演示稿」，让它把稿子建在已登记的稿库目录里
 3. 回到 DeckStage 选中稿子，回车放映
 
+想先看看效果：把 `examples` 目录通过「添加稿库目录」登记进去，就能放映示例稿。
+
 ## 放映
 
 放映中的快捷键：
@@ -80,6 +95,15 @@ npm run install-app     # 打包并安装到 /Applications/DeckStage.app
 演讲者窗口右上角也有「结束放映」按钮，点一次变橙色，3 秒内再点一次才会结束，防止误触。
 
 菜单「放映」里还有「投屏到」、「文件变更自动刷新」、「导出 PPTX」。
+
+## 导出与分享
+
+稿库里鼠标移到某份稿子上（或选中它），右侧出现「导出 ZIP」和「导出 PPTX」：
+
+- **导出 ZIP**：把整个稿子目录打成一个包（自动排除 `.git`、`node_modules`、`.DS_Store`），对方解压后用浏览器打开 `index.html`，或者拖进自己的 DeckStage。
+- **导出 PPTX**：在后台逐页截图，铺进 16:9 的 `.pptx`，版式和放映时完全一致。一份 40 页的稿子大约要一分钟，进度会显示在那一行。代价是页面上的文字在 PowerPoint 里不可编辑。
+
+两种导出都会先弹出保存对话框让你选位置，完成后在 Finder 里定位文件。
 
 ## 手机遥控
 
@@ -162,6 +186,7 @@ src/session.js       一次放映：服务、双窗口、投屏布局、快捷�
 src/server.js        内置静态服务（127.0.0.1，no-store，Range）
 src/library.js       稿库扫描
 src/store.js         配置读写
+src/export.js        导出 ZIP / PPTX（PPTX 在后台隐藏窗口里复用稿子自带的导出）
 src/remote.js        手机遥控服务（0.0.0.0，SSE + POST，令牌/配对码）
 src/remote/          手机遥控网页
 src/skill.js         skill 位置与安装提示词
@@ -171,6 +196,8 @@ src/deck-preload.js  注入放映窗口：隐藏工具条、光标自隐、黑�
 src/renderer/        稿库界面
 skills/deck-html/    配套 skill（稿子框架、模板、体检脚本）
 mobile/              手机 App 壳（Capacitor，Android 脚手架）
+examples/            示例稿（hello-deck）
+docs/screenshots/    README 用的截图
 scripts/             安装脚本、图标生成
 assets/icon/         图标矢量母版与各尺寸
 ```

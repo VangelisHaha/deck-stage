@@ -72,6 +72,18 @@
       meta.appendChild(document.createTextNode(ep ? `第 ${ep[1]} 期` : ''));
       meta.appendChild(document.createElement('br'));
       meta.appendChild(document.createTextNode(d.mtimeText));
+      const busy = state.exporting && state.exporting[d.dir];
+      const acts = el('div', 'acts' + (busy ? ' busy' : ''));
+      if (busy) acts.appendChild(el('span', '', busy));
+      else {
+        for (const [kind, label] of [['zip', '导出 ZIP'], ['pptx', '导出 PPTX']]) {
+          const b = el('button', 'act', label);
+          b.onclick = (e) => { e.stopPropagation(); window.stage.exportDeck(d.dir, kind); };
+          b.ondblclick = (e) => e.stopPropagation();
+          acts.appendChild(b);
+        }
+      }
+      meta.appendChild(acts);
       row.appendChild(meta);
       row.onclick = () => { selected = d.dir; window.stage.select(selected); renderList(); renderBar(); };
       row.ondblclick = () => window.stage.open(d.dir);

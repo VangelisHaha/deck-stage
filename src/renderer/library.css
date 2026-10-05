@@ -56,6 +56,11 @@ h1 { margin: 0; font-family: var(--serif); font-weight: 900; font-size: 44px; li
 .deck.on { background: var(--ink); color: var(--paper); }
 .deck.on .idx { color: var(--signal); }
 .deck.on .path, .deck.on .meta { color: var(--dmuted); }
+.deck .acts { margin-top: 8px; display: flex; gap: 14px; justify-content: flex-end; visibility: hidden; }
+.deck:hover .acts, .deck.on .acts, .deck .acts.busy { visibility: visible; }
+.deck .act { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-decoration: underline; text-underline-offset: 4px; cursor: pointer; }
+.deck .act:hover { color: var(--signal); }
+.deck .acts.busy { color: var(--signal); }
 .empty { padding: 36px 0; font-size: 13px; color: var(--muted); line-height: 1.8; }
 
 footer { height: 84px; flex-shrink: 0; background: var(--ink); color: var(--paper); display: flex; align-items: center; gap: 20px; padding: 0 40px; }

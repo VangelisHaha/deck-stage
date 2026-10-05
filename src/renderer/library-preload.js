@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('stage', {
   addRoot: () => ipcRenderer.invoke('stage:add-root'),
   removeRoot: (dir) => ipcRenderer.invoke('stage:remove-root', dir),
   select: (dir) => ipcRenderer.invoke('stage:select', dir),
+  exportDeck: (dir, kind) => ipcRenderer.invoke('stage:export', dir, kind),
   open: (dir) => ipcRenderer.invoke('stage:open', dir),
   reveal: (dir) => ipcRenderer.invoke('stage:reveal', dir),
   revealSkill: () => ipcRenderer.invoke('stage:reveal-skill'),
