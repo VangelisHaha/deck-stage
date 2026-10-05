@@ -1,0 +1,15 @@
+{
+  "name": "deck-stage-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DeckStage 手机遥控 App 壳（Capacitor）",
+  "scripts": {
+    "sync": "cap sync",
+    "android": "cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/core": "^8.5.2"
+  }
+}

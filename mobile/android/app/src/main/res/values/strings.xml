@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">DeckStage 遥控</string>
+    <string name="title_activity_main">DeckStage 遥控</string>
+    <string name="package_name">com.vangelis.deckstage.remote</string>
+    <string name="custom_url_scheme">com.vangelis.deckstage.remote</string>
+</resources>

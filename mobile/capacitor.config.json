@@ -1,0 +1,8 @@
+{
+  "appId": "com.vangelis.deckstage.remote",
+  "appName": "DeckStage 遥控",
+  "webDir": "www",
+  "server": {
+    "cleartext": true
+  }
+}
