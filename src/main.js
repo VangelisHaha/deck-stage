@@ -50,6 +50,7 @@ function buildState() {
     recent: cfg.recent.map((r) => r.dir),
     selected: selectedDir,
     plan: planInfo(),
+    version: app.getVersion(),
     presenting: !!presentation,
     exporting: Object.fromEntries(exporting),
     remote: remote.summary(),

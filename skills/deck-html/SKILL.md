@@ -1,6 +1,6 @@
 ---
 name: deck-html
-description: 用固定的 HTML 放映框架做技术分享演示稿。用户说“做一份演示稿/PPT”“搭个分享稿框架”“新建 slides”“加一页”“改台词”“导出 PPTX”“演讲者视图”“体检一下这份稿子”“check deck”时使用。框架固定（单页 http 放映、双屏演讲者视图、台词计时、素材自动装载、图片灯箱、导出 PPTX），风格每份稿子自定。
+description: 用固定的 HTML 放映框架做技术分享演示稿。用户说“做一份演示稿/PPT”“搭个分享稿框架”“新建 slides”“加一页”“改台词”“拆分大稿子”“加动画/动效”“页面要调本机接口/发消息按钮”“导出 PPTX/ZIP”“演讲者视图”“体检一下这份稿子”“check deck”“用 DeckStage 放映”时使用。框架固定（单页 http 放映、双屏演讲者视图、台词计时、素材自动装载、图片灯箱、导出 PPTX），风格每份稿子自定；配套 DeckStage（Mac 放映应用）。
 ---
 
 # deck-html
@@ -101,6 +101,17 @@ cd <稿子目录> && ./serve.sh        # 默认 8899，可传参改
 6. **不要自己截图逐页验证。** 改完跑体检 + 告诉用户改了哪几页要重点看什么，让他自己开浏览器。截图核对既慢又容易把服务搞崩。
 7. **文案结构性改动先给方案。** 改配色、修错别字、补降级规则这类可以直接做。
 
+## 新增与修改的规范
+
+按场景读对应文档，不要一次全读：
+
+| 场景 | 读 |
+|---|---|
+| 新建稿子、改文案、加页删页、数据口径、分享前脱敏 | `references/workflow.md` |
+| 页数多，要按幕拆分文件；拆分稿的体检 | `references/split-deck.md`，脚本 `scripts/check_split.py` |
+| 逐条出现、逐字打字、数字滚动等动效；自己写专属动效的规则 | `references/effects.md`，可选引擎 `assets/optional/fx.js` `fx.css` |
+| 用 DeckStage 放映；页面要调本机接口（发消息按钮）；稿子的后台服务 | `references/deckstage.md`，模板 `assets/optional/local_service.py` |
+
 ## 更多
 
 - `references/authoring.md` — 页面结构、动画编排、幕间页、台阶条、图位、台词格式、改页数要复查什么
@@ -113,30 +124,6 @@ cd <稿子目录> && ./serve.sh        # 默认 8899，可传参改
 
 ## 配合 DeckStage 放映（macOS）
 
-DeckStage 是放映这类稿子的 Mac 应用：无浏览器地址栏、双屏、演讲者视图、投屏友好。它不编辑稿子，新建和修改都由本 skill 完成，两者通过 `deckstage://` 链接互动。**没装 DeckStage 的机器忽略本节，`serve.sh` 照常可用。**
+DeckStage 是放映这类稿子的 Mac 应用（无浏览器痕迹、双屏、手机遥控、稿库、导出）。它不编辑稿子，新建和修改都由本 skill 完成，通过 `deckstage://` 链接互动：改完稿子并体检通过后，`open "deckstage://open?path=<稿子目录，URL 编码>"` 让它在稿库里选中。**不要加 `play=1`**，除非用户明确说「现在就放」。
 
-| 场景 | 做法 |
-|---|---|
-| 新稿子放哪 | DeckStage 已登记的稿库目录里（目录列表在配置文件 `~/Library/Application Support/DeckStage/config.json` 的 `roots`）。没有合适目录先问用户 |
-| 登记新目录 | 用户同意后：`open "deckstage://add-root?path=<绝对路径，URL 编码>"` |
-| 稿子改完 | 先体检，通过后：`open "deckstage://open?path=<稿子目录，URL 编码>"`。只会在稿库里选中，不会自动开始放映 |
-| 装好 skill 后回报 | `open "deckstage://skill-installed?agent=<你的名字>"` |
-
-### 稿子需要后台服务时
-
-页面要调本机接口（例如发消息的按钮）时，把服务做成独立进程，只监听 `127.0.0.1`，提供 `/health`、带 CORS 头，然后在稿子目录写 `deckstage.json`，DeckStage 放映时会替用户启动、结束时关闭：
-
-```json
-{ "services": [ { "name": "服务名", "command": ["python3", "path/to/server.py"], "health": "http://127.0.0.1:8898/health" } ] }
-```
-
-- 不要假设 `serve.sh` 会被执行：DeckStage 放映不跑它。
-- 用户第一次放映时会弹窗确认要运行的命令，这是预期行为。
-- 服务要访问外部命令（如 `lark-cli`）时，DeckStage 用用户登录 shell 的环境启动，不会缺 `PATH`。
-- 服务的接口建议校验来源或只接受固定动作：任何网页都能向 `127.0.0.1` 发请求。
-
-约束：
-
-1. 不要加 `play=1` 让 DeckStage 直接开始放映，除非用户明确说「现在就放」。放映会占用外接屏和投影。
-2. 路径必须 URL 编码（中文、空格都要）。
-3. 放映中的修改用「清缓存并重载」（⌘R）生效，或在 DeckStage 菜单里开「文件变更自动刷新」。
+页面要调本机接口时，在稿子目录写 `deckstage.json` 声明后台服务，DeckStage 会替用户启动并在首次弹窗确认。完整说明、服务的安全要求见 `references/deckstage.md`。没装 DeckStage 的机器忽略本节，`serve.sh` 照常可用。

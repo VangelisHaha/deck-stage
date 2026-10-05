@@ -56,7 +56,7 @@ PY
 python3 - "$DEST" "$TITLE" "$SLUG" <<'PY'
 import os, sys
 dest, title, slug = sys.argv[1], sys.argv[2], sys.argv[3]
-for name in ("index.html", "deck.config.js", "notes.js"):
+for name in ("index.html", "deck.config.js", "notes.js", "AGENTS.md"):
     p = os.path.join(dest, name)
     if not os.path.isfile(p):
         continue
@@ -75,4 +75,5 @@ echo "下一步："
 echo "  1. 改 index.html 的 <style> 定风格，每页写一个 <section class=\"slide\" data-t=\"...\">"
 echo "  2. 每页在 notes.js 里配一条同名台词"
 echo "  3. 体检：python3 $SELF/check_deck.py \"$DEST\""
-echo "  4. 放映：cd \"$DEST\" && ./serve.sh"
+echo "  4. 放映：用 DeckStage 打开，或 cd \"$DEST\" && ./serve.sh"
+echo "  5. 改 AGENTS.md：写清这份稿子的内容来源、受众、数据口径（改动流程见 references/workflow.md）"

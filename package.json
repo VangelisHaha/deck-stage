@@ -1,7 +1,7 @@
 {
   "name": "deck-stage",
   "productName": "DeckStage",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "HTML 演示稿放映壳：无浏览器痕迹、双屏、演讲者视图、投屏友好",
   "main": "src/main.js",
   "private": true,
@@ -11,7 +11,8 @@
     "start": "electron .",
     "dist": "electron-builder --mac dir",
     "install-app": "bash scripts/install-app.sh",
-    "icons": "node scripts/gen-icons.js"
+    "icons": "node scripts/gen-icons.js",
+    "pack": "electron-builder --mac zip dmg --x64"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
@@ -53,7 +54,8 @@
           ]
         }
       ]
-    }
+    },
+    "artifactName": "${productName}-${version}-mac-${arch}.${ext}"
   },
   "dependencies": {
     "adm-zip": "^0.6.1",

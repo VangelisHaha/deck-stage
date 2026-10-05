@@ -167,6 +167,18 @@ DeckStage 不编辑稿子，新建和修改都由 Agent 用配套的 [deck-html]
 2. 以后用它新建、修改稿子，放进已登记的稿库目录
 3. 改完体检，再用 `deckstage://` 链接通知 DeckStage
 
+### skill 里有什么
+
+`skills/deck-html` 不只是模板，也包含新增和修改稿子的规范，别人装上就能复用：
+
+| 内容 | 位置 |
+|---|---|
+| 新建、改文案、加页删页的流程；数据口径；分享前脱敏 | `references/workflow.md` |
+| 页数多时按幕拆分文件，以及拆分稿的体检 | `references/split-deck.md`、`scripts/check_split.py` |
+| 逐条出现、逐字打字、数字滚动；写专属动效的规则 | `references/effects.md`、`assets/optional/fx.js` |
+| 用 DeckStage 放映、稿子的后台服务、服务的安全要求 | `references/deckstage.md`、`assets/optional/local_service.py` |
+| 每份稿子的协作约定（给接手的 AI 看） | `assets/template/AGENTS.md`，新建稿子时自动带上 |
+
 ### Agent 互动协议
 
 Agent 通过 macOS 的 `open` 命令和 DeckStage 对话。路径需 URL 编码。

@@ -171,6 +171,7 @@
   }
 
   function render() {
+    document.querySelector('.brand-sub').textContent = '放映台 · v' + state.version;
     renderRemoteBtn();
     renderNav();
     renderList();

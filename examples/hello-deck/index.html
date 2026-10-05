@@ -96,6 +96,7 @@ h2.t em{font-style:normal;color:var(--accent2);}
 if(new URLSearchParams(location.search).has('notes'))
   document.documentElement.classList.add('pv');
 </script>
+<link rel="stylesheet" href="fx.css">
 </head>
 <body>
 
@@ -177,10 +178,10 @@ if(new URLSearchParams(location.search).has('notes'))
   <h2 class="t an d1">一页就是一个 <em>section</em></h2>
   <p class="sub an d2">排版交给浏览器，动画就是 CSS，整份稿子是纯文本。</p>
   <div class="body vc">
-    <div class="grid g3">
-      <div class="card an d3"><h4>不用算坐标</h4><p>flex 和 grid 自动排版，改一句话不会牵动整页。</p></div>
-      <div class="card an d4"><h4>动画没有上限</h4><p>阶梯入场、缩放、滑入是内置的；CSS、SVG、Canvas 想用什么用什么。</p></div>
-      <div class="card an d5"><h4>改动看得清</h4><p>纯文本，<code>git diff</code> 一眼看出改了哪一页。</p></div>
+    <div class="grid g3" data-seq="300 450">
+      <div class="card q"><h4>不用算坐标</h4><p>flex 和 grid 自动排版，改一句话不会牵动整页。</p></div>
+      <div class="card q"><h4>动画没有上限</h4><p>阶梯入场、缩放、滑入是内置的；CSS、SVG、Canvas 想用什么用什么。</p></div>
+      <div class="card q"><h4>改动看得清</h4><p>纯文本，<code>git diff</code> 一眼看出改了哪一页。</p></div>
     </div>
     <div class="punch an d6" style="margin-top:22px">
       <p>这一页的每个卡片，<span class="hl">都是依次入场的</span>。
@@ -234,6 +235,7 @@ if(new URLSearchParams(location.search).has('notes'))
 <script src="lib/html2canvas.min.js"></script>
 <script src="lib/pptxgen.bundle.js"></script>
 <script src="deck.js"></script>
+<script src="fx.js"></script>
 
 <script>
 /* ============================================================
