@@ -105,6 +105,28 @@ npm run install-app     # 打包并安装到 /Applications/DeckStage.app
 
 两种导出都会先弹出保存对话框让你选位置，完成后在 Finder 里定位文件。
 
+## 稿子自带的后台服务
+
+有的稿子页面要调本机的接口，比如结尾页的「发送到群聊」按钮要请求一个本地服务。在稿子目录放一个 `deckstage.json` 声明它，放映时 DeckStage 替你启动，放映结束自动关闭：
+
+```json
+{
+  "services": [
+    {
+      "name": "分享发送服务",
+      "command": ["python3", "share/share_server.py"],
+      "health": "http://127.0.0.1:8898/health"
+    }
+  ]
+}
+```
+
+- `command` 在稿子目录下执行，环境用你的登录 shell 的环境。从 Finder 启动的应用只有最小的 `PATH`，找不到 `lark-cli`、`node` 这类命令，所以不能直接继承应用的环境。
+- `health` 可选。放映前先访问一次，已经能通就认为服务在跑（比如你自己启动过），不会重复启动，结束时也不会关掉它。
+- 服务的日志在 `~/Library/Application Support/DeckStage/logs/`。
+
+**安全**：打开别人给的稿子就执行里面的命令，等于运行陌生程序。所以首次放映、或者命令和脚本内容有变化时，DeckStage 会弹窗列出要运行的命令，由你选择「允许并记住」「仅本次允许」「不启动」。只有信任稿子来源时才允许。
+
 ## 手机遥控
 
 稿库左下角「手机遥控」（或 `⌘K`）打开面板：
@@ -186,6 +208,7 @@ src/session.js       一次放映：服务、双窗口、投屏布局、快捷�
 src/server.js        内置静态服务（127.0.0.1，no-store，Range）
 src/library.js       稿库扫描
 src/store.js         配置读写
+src/services.js      稿子自带的后台服务（deckstage.json，首次需用户确认）
 src/export.js        导出 ZIP / PPTX（PPTX 在后台隐藏窗口里复用稿子自带的导出）
 src/remote.js        手机遥控服务（0.0.0.0，SSE + POST，令牌/配对码）
 src/remote/          手机遥控网页

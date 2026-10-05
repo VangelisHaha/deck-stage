@@ -5,6 +5,7 @@ const path = require('path');
 const { BrowserWindow, Notification, powerSaveBlocker, screen, session } = require('electron');
 const { startServer } = require('./server');
 const { JPEG_PATCH_JS } = require('./export');
+const { Services } = require('./services');
 const { fitWindow16x9, stablePort, readDeckTitle } = require('./util');
 
 const PRELOAD = path.join(__dirname, 'deck-preload.js');
@@ -12,8 +13,9 @@ const sameRect = (a, b) => a.x === b.x && a.y === b.y && a.width === b.width && 
 const BG = { audience: '#000000', presenter: '#0F0F0E' };
 
 class Presentation {
-  constructor(root, { onEnd, onChange }) {
+  constructor(root, { onEnd, onChange, confirmServices }) {
     this.root = root;
+    this.services = new Services(root, { confirm: confirmServices, notify: (m) => this.notify(m) });
     this.onEnd = onEnd;
     this.onChange = onChange;
     this.server = null;
@@ -40,6 +42,7 @@ class Presentation {
   }
 
   async start(hotReload) {
+    await this.services.start(); // 稿子自带的后台服务（deckstage.json），先于窗口启动，页面一进来就能连上
     this.server = await startServer(this.root, stablePort(this.root));
     await session.defaultSession.clearCache();
     this.blocker = powerSaveBlocker.start('prevent-display-sleep');
@@ -376,6 +379,7 @@ class Presentation {
       if (win && !win.isDestroyed()) { win.removeAllListeners('closed'); win.destroy(); }
     }
     if (this.server) await this.server.close();
+    await this.services.stop();
     this.onEnd();
   }
 }

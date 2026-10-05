@@ -122,6 +122,19 @@ DeckStage 是放映这类稿子的 Mac 应用：无浏览器地址栏、双屏�
 | 稿子改完 | 先体检，通过后：`open "deckstage://open?path=<稿子目录，URL 编码>"`。只会在稿库里选中，不会自动开始放映 |
 | 装好 skill 后回报 | `open "deckstage://skill-installed?agent=<你的名字>"` |
 
+### 稿子需要后台服务时
+
+页面要调本机接口（例如发消息的按钮）时，把服务做成独立进程，只监听 `127.0.0.1`，提供 `/health`、带 CORS 头，然后在稿子目录写 `deckstage.json`，DeckStage 放映时会替用户启动、结束时关闭：
+
+```json
+{ "services": [ { "name": "服务名", "command": ["python3", "path/to/server.py"], "health": "http://127.0.0.1:8898/health" } ] }
+```
+
+- 不要假设 `serve.sh` 会被执行：DeckStage 放映不跑它。
+- 用户第一次放映时会弹窗确认要运行的命令，这是预期行为。
+- 服务要访问外部命令（如 `lark-cli`）时，DeckStage 用用户登录 shell 的环境启动，不会缺 `PATH`。
+- 服务的接口建议校验来源或只接受固定动作：任何网页都能向 `127.0.0.1` 发请求。
+
 约束：
 
 1. 不要加 `play=1` 让 DeckStage 直接开始放映，除非用户明确说「现在就放」。放映会占用外接屏和投影。

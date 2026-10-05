@@ -8,7 +8,7 @@ const { expandHome, isDir } = require('./util');
 // 首次启动时预置的稿库目录（不存在的会被过滤掉）。默认为空，由用户在稿库里添加。
 const SEED_ROOTS = [];
 
-const EMPTY = { roots: [], recent: [], skillAgents: [], hotReload: false };
+const EMPTY = { roots: [], recent: [], skillAgents: [], hotReload: false, trusted: {} };
 
 function file() { return path.join(app.getPath('userData'), 'config.json'); }
 

@@ -111,12 +111,31 @@ const actions = {
   }
 };
 
+// 稿子要启动后台程序时的确认：首次、或命令/脚本内容变化时才问，同意并记住后不再打扰
+async function confirmServices({ root, services, fingerprint }) {
+  const cfg = store.read();
+  if (cfg.trusted && cfg.trusted[root] === fingerprint) return true;
+  const detail = services.map((s) => `• ${s.name}\n   ${s.command.join(' ')}`).join('\n');
+  const r = await dialog.showMessageBox(library && !library.isDestroyed() ? library : undefined, {
+    type: 'question',
+    buttons: ['允许并记住', '仅本次允许', '不启动'],
+    defaultId: 1,
+    cancelId: 2,
+    title: '稿子要启动后台程序',
+    message: `《${readDeckTitle(root)}》放映时要启动后台程序`,
+    detail: `${detail}\n\n程序会以你的身份在这台电脑上运行，放映结束时自动关闭。只有信任这份稿子的来源时才选择允许。`
+  });
+  if (r.response === 0) store.update((c) => { c.trusted = c.trusted || {}; c.trusted[root] = fingerprint; });
+  return r.response !== 2;
+}
+
 async function startPresentation(dir) {
   if (presentation) return presentation.notify('正在放映，先结束当前放映');
   const root = resolveDeckRoot(dir);
   if (!root) return dialog.showErrorBox('不是稿子目录', `${dir}\n里面要有 index.html 和 deck.config.js（或 notes.js）。`);
   store.touchRecent(root);
   presentation = new Presentation(root, {
+    confirmServices,
     onChange: () => { rebuildMenu(); pushState(); remoteBroadcast(); },
     onEnd: () => {
       presentation = null;

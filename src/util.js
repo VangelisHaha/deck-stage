@@ -3,6 +3,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { execFile } = require('child_process');
 
 function expandHome(p) {
   if (!p) return p;
@@ -93,6 +94,30 @@ function fitWindow16x9(workArea, { maxWidth = 1280, widthRatio = 0.62, inset = 4
   return { x: workArea.x + inset, y: workArea.y + inset, width, height };
 }
 
+// 从 Finder / Dock 启动的 App 只有最小的 PATH，找不到 lark-cli、node 之类。
+// 用用户的登录 shell 跑一次 env 拿到终端里的环境，启动稿子的后台服务时使用。结果缓存。
+let shellEnvPromise = null;
+function loginShellEnv() {
+  if (process.platform === 'win32') return Promise.resolve(process.env);
+  if (!shellEnvPromise) {
+    shellEnvPromise = new Promise((resolve) => {
+      const BEGIN = '__DECKSTAGE_ENV_BEGIN__';
+      const END = '__DECKSTAGE_ENV_END__';
+      const shell = process.env.SHELL || '/bin/zsh';
+      execFile(shell, ['-ilc', `echo ${BEGIN}; env; echo ${END}`], { timeout: 8000, maxBuffer: 1 << 20 }, (err, out) => {
+        const body = !err && out && out.split(BEGIN)[1] ? out.split(BEGIN)[1].split(END)[0] : '';
+        const env = {};
+        for (const line of body.split('\n')) {
+          const i = line.indexOf('=');
+          if (i > 0 && /^[A-Za-z_][A-Za-z0-9_]*$/.test(line.slice(0, i))) env[line.slice(0, i)] = line.slice(i + 1);
+        }
+        resolve(Object.keys(env).length ? Object.assign({}, process.env, env) : process.env);
+      });
+    });
+  }
+  return shellEnvPromise;
+}
+
 // 本机局域网 IPv4，私有网段优先（192.168 / 10 / 172.16-31），用来拼手机访问的地址
 function lanAddresses() {
   const out = [];
@@ -115,7 +140,7 @@ function uaLabel(ua = '') {
 }
 
 module.exports = {
-  lanAddresses, uaLabel, safeName,
+  loginShellEnv, lanAddresses, uaLabel, safeName,
   expandHome, isDir, isDeckDir, resolveDeckRoot, readDeckTitle, deckLabel,
   latestMtime, stablePort, formatTime, fitWindow16x9
 };
