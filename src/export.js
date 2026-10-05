@@ -10,6 +10,18 @@ const { startServer } = require('./server');
 const SKIP_NAMES = new Set(['.DS_Store', '.git', 'node_modules', 'Thumbs.db']);
 const EXPORT_TIMEOUT_MS = 10 * 60 * 1000;
 
+// 稿子内核导出时每页存成 PNG，几十页能到几十 MB。导出前把页面里 canvas 的 PNG 输出改成 JPEG：
+// 幻灯片以纯色和渐变为主，JPEG 体积小一个数量级。html2canvas 带了底色，不会有透明区域。
+const JPEG_QUALITY = 0.85;
+const JPEG_PATCH_JS = `(function(){
+  if (HTMLCanvasElement.prototype.__dsJpeg) return;
+  var orig = HTMLCanvasElement.prototype.toDataURL;
+  HTMLCanvasElement.prototype.__dsJpeg = true;
+  HTMLCanvasElement.prototype.toDataURL = function(type, q){
+    return (!type || type === 'image/png') ? orig.call(this, 'image/jpeg', ${JPEG_QUALITY}) : orig.apply(this, arguments);
+  };
+})()`;
+
 // 后台导出窗口的下载要存到用户选的路径；放映中的「导出 PPTX」不在这里登记，走默认的下载目录
 const downloadTargets = new Map(); // webContents.id -> { dest, done(err) }
 
@@ -49,6 +61,7 @@ async function exportPptx(root, dest, onProgress) {
   try {
     await win.loadURL(`${server.origin}/index.html`);
     await new Promise((r) => setTimeout(r, 800)); // 等素材装载
+    await wc.executeJavaScript(JPEG_PATCH_JS);
     const started = await wc.executeJavaScript(
       "(function(){var b=document.getElementById('btnPptx');if(!b)return false;b.click();return true;})()"
     );
@@ -71,4 +84,4 @@ async function exportPptx(root, dest, onProgress) {
   }
 }
 
-module.exports = { exportZip, exportPptx, installDownloadHandler };
+module.exports = { exportZip, exportPptx, installDownloadHandler, JPEG_PATCH_JS };

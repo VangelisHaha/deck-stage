@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { BrowserWindow, Notification, powerSaveBlocker, screen, session } = require('electron');
 const { startServer } = require('./server');
+const { JPEG_PATCH_JS } = require('./export');
 const { fitWindow16x9, stablePort, readDeckTitle } = require('./util');
 
 const PRELOAD = path.join(__dirname, 'deck-preload.js');
@@ -275,9 +276,12 @@ class Presentation {
 
   exportPptx() {
     if (!this.audience) return;
-    this.audience.webContents.executeJavaScript(
-      "(function(){var b=document.getElementById('btnPptx');if(b){b.click();return true;}return false;})()"
-    ).then((ok) => { if (!ok) this.notify('这份稿子没有导出按钮'); });
+    const wc = this.audience.webContents;
+    wc.executeJavaScript(JPEG_PATCH_JS)
+      .then(() => wc.executeJavaScript(
+        "(function(){var b=document.getElementById('btnPptx');if(b){b.click();return true;}return false;})()"
+      ))
+      .then((ok) => { if (!ok) this.notify('这份稿子没有导出按钮'); });
   }
 
   notify(body) {
