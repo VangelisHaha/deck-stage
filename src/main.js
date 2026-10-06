@@ -13,6 +13,7 @@ const { isDir, isDeckDir, resolveDeckRoot, readDeckTitle, safeName } = require('
 const ssh = require('./ssh');
 const connections = require('./connections');
 const { RemoteDecks } = require('./remote-decks');
+const { createUpdateManager } = require('./updater');
 
 app.setName('DeckStage');
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -20,6 +21,7 @@ if (!app.requestSingleInstanceLock()) app.quit();
 let library = null;
 let presentation = null;
 let selectedDir = null;
+let updateManager = null;
 let toastText = '';
 const exporting = new Map(); // 稿子目录 -> 正在导出的状态文字
 const pendingUrls = [];
@@ -169,6 +171,8 @@ const actions = {
     library.webContents.send('stage:show-remote');
   },
   openConfigDir() { shell.showItemInFolder(store.file()); },
+  checkForUpdates() { return updateManager && updateManager.check({ manual: true }); },
+  openReleases() { return updateManager && updateManager.openReleasePage(); },
   setHotReload(on) {
     store.update((c) => { c.hotReload = on; });
     if (presentation) presentation.setHotReload(on);
@@ -420,10 +424,18 @@ app.whenReady().then(() => {
   // 开发模式没有打包图标，手动设置 dock 图标
   if (!app.isPackaged && app.dock) app.dock.setIcon(path.join(__dirname, '..', 'build', 'icon.png'));
   installDownloadHandler();
+  updateManager = createUpdateManager({
+    app,
+    dialog,
+    shell,
+    getWindow: () => library,
+    toast
+  });
   ssh.configure({ askpass: path.join(app.getPath('userData'), 'askpass.sh') });
   remoteDecks.load();
   rebuildMenu();
   showLibrary();
+  updateManager.start();
   remoteDecks.refreshAll(remoteRoots(store.read().roots));
   handleArgv(process.argv);
   for (const u of pendingUrls.splice(0)) handleUrl(u);

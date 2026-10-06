@@ -1,0 +1,180 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要发布的标签（例如 v0.3.1，必须已存在）"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+jobs:
+  macos:
+    name: macOS x64 + arm64
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+      - name: 校验标签与版本
+        shell: bash
+        run: |
+          version=$(node -p "require('./package.json').version")
+          test "$RELEASE_TAG" = "v$version" || { echo "标签 $RELEASE_TAG 与 package.json v$version 不一致"; exit 1; }
+      - run: npm ci
+      - name: 构建 macOS 双架构安装包和更新清单
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run dist:mac
+      - name: 校验 macOS 产物
+        shell: bash
+        run: |
+          version=${RELEASE_TAG#v}
+          for arch in x64 arm64; do
+            test -s "dist/DeckStage-${version}-mac-${arch}.dmg"
+            test -s "dist/DeckStage-${version}-mac-${arch}.zip"
+          done
+          test -s dist/latest-mac.yml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-macos
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/latest-mac.yml
+            dist/*.blockmap
+          if-no-files-found: error
+
+  windows:
+    name: Windows x64
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+      - name: 校验标签与版本
+        shell: bash
+        run: |
+          version=$(node -p "require('./package.json').version")
+          test "$RELEASE_TAG" = "v$version" || { echo "标签 $RELEASE_TAG 与 package.json v$version 不一致"; exit 1; }
+      - run: npm ci
+      - name: 构建 Windows 安装包和更新清单
+        run: npm run dist:win
+      - name: 校验 Windows 产物版本
+        shell: pwsh
+        run: |
+          $version = $env:RELEASE_TAG.TrimStart('v')
+          $installer = "dist/DeckStage-$version-win-x64.exe"
+          if (-not (Test-Path $installer)) { throw "缺少 $installer" }
+          if ((Get-Item $installer).Length -le 0) { throw "$installer 是空文件" }
+          if (-not (Test-Path 'dist/latest.yml')) { throw '缺少 dist/latest.yml' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: |
+            dist/*.exe
+            dist/*.yml
+            dist/*.blockmap
+          if-no-files-found: error
+
+  android:
+    name: Android APK
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - name: 校验标签与版本
+        shell: bash
+        run: |
+          version=${RELEASE_TAG#v}
+          root_version=$(node -p "require('./package.json').version")
+          test "$version" = "$root_version" || { echo "标签与 package.json 版本不一致"; exit 1; }
+      - name: 安装并同步 Capacitor
+        working-directory: mobile
+        run: npm ci && npx cap sync android
+      - name: 构建可安装 APK（Debug 签名）
+        working-directory: mobile/android
+        run: ./gradlew assembleDebug
+      - name: 收集并校验 APK
+        shell: bash
+        run: |
+          version=${RELEASE_TAG#v}
+          apk=mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          mkdir -p dist
+          cp "$apk" "dist/DeckStage-${version}-android.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-android
+          path: dist/*.apk
+          if-no-files-found: error
+
+  publish:
+    name: 发布 GitHub Release
+    runs-on: ubuntu-24.04
+    needs: [macos, windows, android]
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: release-*
+          path: release
+          merge-multiple: true
+      - name: 校验四类安装包与自动更新清单
+        shell: bash
+        run: |
+          version=${RELEASE_TAG#v}
+          required=(
+            "DeckStage-${version}-android.apk"
+            "DeckStage-${version}-win-x64.exe"
+            "DeckStage-${version}-mac-x64.dmg"
+            "DeckStage-${version}-mac-arm64.dmg"
+            "latest.yml"
+            "latest-mac.yml"
+          )
+          for file in "${required[@]}"; do
+            test -s "release/$file" || { echo "缺少发布产物：$file"; find release -maxdepth 1 -type f -print; exit 1; }
+          done
+          find release -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
+      - name: 创建或更新 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          repo=${GITHUB_REPOSITORY}
+          if gh release view "$RELEASE_TAG" --repo "$repo" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release/* --repo "$repo" --clobber
+            gh release edit "$RELEASE_TAG" --repo "$repo" --latest
+          else
+            gh release create "$RELEASE_TAG" release/* --repo "$repo" --verify-tag --generate-notes --latest
+          fi

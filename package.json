@@ -9,10 +9,13 @@
   "license": "MIT",
   "scripts": {
     "start": "electron .",
+    "test": "node --test test/*.test.js",
     "dist": "electron-builder --mac dir",
+    "dist:mac": "electron-builder --mac dmg zip --x64 --arm64 --publish never",
+    "dist:win": "electron-builder --win nsis --x64 --publish never",
     "install-app": "bash scripts/install-app.sh",
     "icons": "node scripts/gen-icons.js",
-    "pack": "electron-builder --mac zip dmg --x64"
+    "pack": "electron-builder --mac zip dmg --x64 --publish never"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
@@ -22,6 +25,13 @@
   "build": {
     "appId": "com.vangelis.deckstage",
     "productName": "DeckStage",
+    "electronUpdaterCompatibility": ">=2.16",
+    "publish": {
+      "provider": "github",
+      "owner": "VangelisHaha",
+      "repo": "deck-stage",
+      "releaseType": "release"
+    },
     "directories": {
       "output": "dist"
     },
@@ -45,20 +55,40 @@
     ],
     "mac": {
       "category": "public.app-category.productivity",
-      "identity": null,
+      "identity": "-",
+      "hardenedRuntime": false,
+      "minimumSystemVersion": "13.0",
       "target": [
         {
-          "target": "dir",
-          "arch": [
-            "x64"
-          ]
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["x64", "arm64"]
         }
       ]
     },
-    "artifactName": "${productName}-${version}-mac-${arch}.${ext}"
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
   },
   "dependencies": {
     "adm-zip": "^0.6.1",
+    "electron-updater": "6.8.9",
     "qrcode": "^1.5.4"
   },
   "repository": {

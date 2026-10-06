@@ -60,6 +60,9 @@ function buildMenu({ presentation, hotReload, actions }) {
     {
       label: '帮助',
       submenu: [
+        { label: '检查更新…', click: actions.checkForUpdates },
+        { label: 'GitHub 发布页', click: actions.openReleases },
+        { type: 'separator' },
         { label: '新建 / 编辑（安装 skill）…', click: actions.showSkills },
         { label: '打开配置文件夹', click: actions.openConfigDir }
       ]

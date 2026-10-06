@@ -58,16 +58,25 @@ HTML 稿直接用浏览器放映有几个很烦的问题，DeckStage 就是解�
 
 ## 安装
 
-目前需要从源码构建（macOS，Node 22+）：
+从 [GitHub Releases](https://github.com/VangelisHaha/deck-stage/releases/latest) 下载对应安装包：
+
+- **Android**：`DeckStage-版本-android.apk`（手机遥控 App，使用 Debug 签名，可直接侧载）
+- **Windows x64**：`DeckStage-版本-win-x64.exe`
+- **macOS Intel**：`DeckStage-版本-mac-x64.dmg`
+- **macOS Apple Silicon**：`DeckStage-版本-mac-arm64.dmg`
+
+桌面安装版启动后会自动检查 GitHub Release，新版本下载完成后会提示重启安装；也可以从「帮助 → 检查更新…」手动触发。当前发布包未做商业代码签名：macOS 首次打开可能需要在「系统设置 → 隐私与安全性」中确认，Windows 可能显示 SmartScreen 提示。
+
+也可以从源码构建（Node 22+）：
 
 ```bash
 git clone https://github.com/VangelisHaha/deck-stage.git
 cd deck-stage
 npm install
-npm run install-app     # 打包并安装到 /Applications/DeckStage.app
+npm start
 ```
 
-开发时 `npm start`，可以带稿子目录：`npm start -- /path/to/deck`。当前只打包 x64，不签名。
+macOS 本地安装可运行 `npm run install-app`；开发时可以带稿子目录：`npm start -- /path/to/deck`。
 
 ## 快速开始
 
