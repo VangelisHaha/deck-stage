@@ -57,9 +57,9 @@ DeckStage 的行为：
 
 稿子可以放在远端的 Linux / Mac 上，DeckStage 通过 SSH 访问：
 
-- 稿库里的「添加远端目录（SSH）」，填 `user@host:/路径`、`ssh://user@host:2222/路径` 或 `~/.ssh/config` 里的别名（如 `dev:/data/decks`）。需要免密登录（密钥或 ssh-agent），不弹密码。
+- 稿库里的「添加远端目录（SSH）」，填主机、端口、用户名、密码、远端目录（密码留空则用密钥或 ssh-agent；主机也可以是 `~/.ssh/config` 里的别名）。连接信息保存在用户本机，下次自动出现。
 - 放映和导出前，DeckStage 用 rsync 把那一份稿子同步到本机缓存再放，所以 **Agent 在远端建稿、改稿时不需要做任何特殊处理**，保持稿子目录结构不变（`index.html` + `deck.config.js` / `notes.js`）即可。
-- 本机 Agent 可以执行 `open "deckstage://add-root?path=ssh%3A%2F%2Fuser%40host%2Fpath"` 登记远端目录；跑在远端的 Agent 没法执行本机的 `open`，让用户在界面里添加。
+- 本机 Agent 可以执行 `open "deckstage://add-root?path=ssh%3A%2F%2Fuser%40host%2Fpath"` 登记远端目录（只用于不需要密码、或本机已保存过这台机器密码的情况；**不要把用户的密码拼进链接或写进任何文件**，需要密码时让用户在界面里填）；跑在远端的 Agent 没法执行本机的 `open`，同样让用户在界面里添加。
 - 稿子里有 `deckstage.json` 要启动后台服务时，同步到本机后在本机运行（信任弹窗会标明来源主机）。服务脚本要能在用户本机跑，不要依赖远端才有的路径、凭证或软件。
 - 同步会排除 `node_modules` 和 `.git`。图片、视频等大文件首次同步会慢，之后只传变化的部分。
 

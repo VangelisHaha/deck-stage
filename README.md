@@ -123,18 +123,21 @@ npm run install-app     # 打包并安装到 /Applications/DeckStage.app
 
 稿子放在另一台机器上（比如开发机、服务器、另一台 Mac），不用手动拷：
 
-1. 稿库左下角点「+ 添加远端目录（SSH）」，填 `user@host:/path/to/decks`，也可以写 `~/.ssh/config` 里的别名（`dev:/data/decks`）或 `ssh://user@host:2222/path`
-2. 添加时会先连一次，确认能连上、目录存在
-3. 远端稿子出现在稿库里，路径行标着 `SSH` 和「已缓存 / 未同步」
-4. 放映或导出时，先用 rsync 把这份稿子同步到本机缓存（只传变化的部分），然后和本地稿子完全一样；放映中按 `⌘R` 会重新同步并重载
+1. 稿库左下角点「+ 添加远端目录（SSH）」，填 **主机地址、端口、用户名、密码、远端目录**。密码留空就用密钥登录；主机也可以写 `~/.ssh/config` 里的别名
+2. 首次连接某台机器，会弹出它的主机指纹让你确认，选「信任并继续」才会记进 `known_hosts`，不会不声不响地信任
+3. 添加时会先连一次，确认能连上、目录存在
+4. 连接信息（主机、端口、用户名、加密后的密码）**保存在本机**：下次启动，远端稿库自动出现在列表里；再添加同一台机器的别的目录，点一下表单上方保存的连接就能带出，不用重输
+5. 远端稿子出现在稿库里，路径行标着 `SSH` 和「已缓存 / 未同步」
+6. 放映或导出时，先用 rsync 把这份稿子同步到本机缓存（只传变化的部分），然后和本地稿子完全一样；放映中按 `⌘R` 会重新同步并重载
 
 要点：
 
-- 复用系统的 `ssh` 和 `rsync`，`~/.ssh/config`、密钥、ssh-agent、跳板机都直接生效；**只支持免密登录**，不会弹密码框。主机指纹没确认过的话，先在终端 `ssh` 连一次
+- 复用系统的 `ssh` 和 `rsync`，`~/.ssh/config`、密钥、ssh-agent、跳板机都直接生效。密码登录通过 `SSH_ASKPASS` 递给 ssh，不出现在命令行里
+- **密码怎么存的**：AES-256-GCM 加密后写进 `~/Library/Application Support/DeckStage/connections.json`（权限 600），密钥在同目录 `connections.key`。这只能防「打开文件就看到明文」和误传配置，**防不了能读你用户目录的人**；没用系统钥匙串，是因为未签名的应用每次升级都会被重新询问授权。介意的话用密钥登录，密码留空
 - 同步失败时，如果本机有上次的副本，会问你要不要用旧副本放映，不会直接放弃
 - 稿子里的 `deckstage.json` 后台服务同步后在本机运行，信任弹窗会标明来源主机
-- 缓存在 `~/Library/Application Support/DeckStage/remote/`，从稿库里移除这个远端目录会一并清掉
-- 远端要有 `sh`、`find`，同步要有 `rsync`；Linux 和 macOS 的远端都测过
+- 缓存在 `~/Library/Application Support/DeckStage/remote/`，从稿库里移除这个远端目录会一并清掉（保存的连接和密码不删，表单上方的连接标签里点 × 才会忘掉）
+- 远端要有 `sh`、`find`，同步要有 `rsync`；Linux 和 macOS 的远端都支持
 
 ## 稿子自带的后台服务
 
@@ -233,7 +236,7 @@ Agent 通过 macOS 的 `open` 命令和 DeckStage 对话。路径需 URL 编码�
 - Android App 壳目前只有脚手架（`mobile/`），音量键、连接页都还没做
 - iOS 原生 App 暂时做不了：Capacitor 8 要求 Xcode 26，需要较新的 macOS
 - 导出的 PPTX 是截图式的，文字不可编辑
-- 远端稿库只支持免密登录；远端是 Windows 的未测试。真正跨机器的 SSH（别的主机、跳板机）我只在本机回环的 sshd 上验证过
+- 远端稿库：远端是 Windows 的未测试；真正跨机器的 SSH（别的主机、跳板机）、密码登录成功的完整流程，我只在本机回环的 sshd 上验证过（本机 sshd 无法校验密码，密码只验证到「正确送达 ssh」这一步）
 
 ## 路线
 
@@ -253,7 +256,8 @@ src/server.js        内置静态服务（127.0.0.1，no-store，Range）
 src/library.js       稿库扫描
 src/store.js         配置读写
 src/services.js      稿子自带的后台服务（deckstage.json，首次需用户确认）
-src/ssh.js           远端稿库底层：解析 SSH 地址、列出远端稿子、rsync 同步
+src/ssh.js           远端稿库底层：解析 SSH 地址、列出远端稿子、rsync 同步、密码（askpass）与主机指纹
+src/connections.js   已保存的 SSH 连接（密码加密落盘）
 src/remote-decks.js  远端稿库：扫描缓存、本机镜像目录、放映 / 导出前同步
 src/export.js        导出 ZIP / PPTX（PPTX 在后台隐藏窗口里复用稿子自带的导出）
 src/remote.js        手机遥控服务（0.0.0.0，SSE + POST，令牌/配对码）

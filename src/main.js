@@ -11,6 +11,7 @@ const skill = require('./skill');
 const { RemoteServer } = require('./remote');
 const { isDir, isDeckDir, resolveDeckRoot, readDeckTitle, safeName } = require('./util');
 const ssh = require('./ssh');
+const connections = require('./connections');
 const { RemoteDecks } = require('./remote-decks');
 
 app.setName('DeckStage');
@@ -24,7 +25,10 @@ const exporting = new Map(); // 稿子目录 -> 正在导出的状态文字
 const pendingUrls = [];
 
 // 远端稿库（SSH）：列表来自扫描缓存，放映 / 导出前再把那一份同步到本机
-const remoteDecks = new RemoteDecks({ onChange: () => pushState() });
+const remoteDecks = new RemoteDecks({
+  onChange: () => pushState(),
+  passwordFor: (r) => connections.password(r)
+});
 const remoteRoots = (roots) => roots.filter(ssh.isRemote);
 
 // 手机遥控：默认关闭，需要时在稿库里手动开启。放映状态变化时广播给所有已连手机。
@@ -108,14 +112,46 @@ const actions = {
     store.addRoot(r.filePaths[0]);
     pushState();
   },
-  // 添加远端稿库：先连一次确认能连上、目录在，再登记
+  // 添加远端稿库。input 是表单对象 { host, port, user, password, path }，或 ssh 地址字符串（Agent 通过 deckstage:// 来的）。
+  // 流程：首次连接确认主机指纹 → 连一次确认能连上、目录在 → 保存连接和稿库
   async addRemote(input) {
-    const r = ssh.parseRemote(input);
-    if (!r) return { ok: false, error: '地址格式不对，应为 user@host:/路径 或 ssh://user@host/路径' };
+    let r;
+    if (typeof input === 'string') {
+      r = ssh.parseRemote(input);
+      if (!r) return { ok: false, error: '地址格式不对，应为 user@host:/路径 或 ssh://user@host/路径' };
+    } else {
+      const host = String(input.host || '').trim();
+      if (!host || /[\s/]/.test(host)) return { ok: false, error: '主机地址不对，只填主机名或 IP（路径填在下面的目录里）' };
+      const port = String(input.port || '').trim();
+      if (port && !/^\d{1,5}$/.test(port)) return { ok: false, error: '端口应该是数字' };
+      const user = String(input.user || '').trim();
+      if (input.password && !user) return { ok: false, error: '用密码登录需要填用户名' };
+      let dir = String(input.path || '').trim() || '~';
+      if (!/^[/~]/.test(dir)) dir = '~/' + dir;
+      if (dir.length > 1) dir = dir.replace(/\/+$/, '') || '/';
+      r = { user, host, port: port === '22' ? '' : port, path: dir };
+    }
     const spec = ssh.canonical(r);
-    if (store.read().roots.includes(spec)) return { ok: false, error: '这个远端目录已经登记过了' };
+    const typed = typeof input === 'object' && input.password ? String(input.password) : '';
+    r.password = typed || connections.password(r) || '';
     try {
+      const hk = await ssh.hostKey(r);
+      if (!hk.known && !hk.unreachable) {
+        const fp = hk.fingerprints.length ? hk.fingerprints.join('\n') : '（取不到指纹）';
+        const ans = await dialog.showMessageBox(library && !library.isDestroyed() ? library : undefined, {
+          type: 'question',
+          buttons: ['信任并继续', '取消'],
+          defaultId: 1,
+          cancelId: 1,
+          title: '首次连接这台机器',
+          message: `首次连接 ${r.host}${r.port ? ':' + r.port : ''}，确认主机指纹`,
+          detail: `${fp}\n\n如果不确定这是不是你要连的机器，选取消。选「信任并继续」后，指纹会记入 ${hk.file}。`
+        });
+        if (ans.response !== 0) return { ok: false, error: '已取消：没有信任这台机器的指纹' };
+        ssh.trustHostKey(hk);
+      }
       const count = await ssh.probe(r);
+      if (r.user || r.password) connections.save({ user: r.user, host: r.host, port: r.port, password: typed });
       store.addRoot(spec);
       remoteDecks.refresh(spec);
       pushState();
@@ -348,6 +384,8 @@ ipcMain.handle('stage:get-state', () => buildState());
 ipcMain.handle('stage:add-root', () => actions.addRootDialog());
 ipcMain.handle('stage:remove-root', (_e, dir) => { store.removeRoot(dir); if (ssh.isRemote(dir)) remoteDecks.forget(dir); pushState(); });
 ipcMain.handle('stage:add-remote', (_e, input) => actions.addRemote(input));
+ipcMain.handle('stage:connections', () => connections.list());
+ipcMain.handle('stage:forget-connection', (_e, id) => { connections.remove(id); });
 ipcMain.handle('stage:refresh-remote', (_e, spec) => { remoteDecks.refreshAll(spec ? [spec] : remoteRoots(store.read().roots)); });
 ipcMain.handle('stage:select', (_e, dir) => { selectedDir = dir; });
 ipcMain.handle('stage:export', (_e, dir, kind) => exportDeck(dir, kind));
@@ -382,6 +420,7 @@ app.whenReady().then(() => {
   // 开发模式没有打包图标，手动设置 dock 图标
   if (!app.isPackaged && app.dock) app.dock.setIcon(path.join(__dirname, '..', 'build', 'icon.png'));
   installDownloadHandler();
+  ssh.configure({ askpass: path.join(app.getPath('userData'), 'askpass.sh') });
   remoteDecks.load();
   rebuildMenu();
   showLibrary();

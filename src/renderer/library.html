@@ -43,14 +43,20 @@
     <div class="sheet-head">
       <div>
         <h2>添加远端目录</h2>
-        <p class="muted">稿子在另一台 Linux / Mac 上时，填 SSH 地址。放映和导出前会自动同步到本机，之后和本地稿子一样用。</p>
+        <p class="muted">稿子在另一台 Linux / Mac 上时，填这台机器的 SSH 登录信息。放映和导出前会自动同步到本机。</p>
       </div>
       <button id="closeAddRemote" class="link-ink">关闭 Esc</button>
     </div>
     <section>
-      <div class="row-head"><span class="label ink">SSH 地址</span></div>
-      <input id="remoteSpec" class="field" type="text" placeholder="user@host:/path/to/decks" spellcheck="false" autocomplete="off">
-      <p class="muted small">也可以写 ~/.ssh/config 里的别名（如 dev:/data/decks）或 ssh://user@host:2222/路径。需要免密登录（密钥或 ssh-agent），不会弹出密码输入。</p>
+      <div id="savedConns" class="chips" hidden></div>
+      <div class="grid2">
+        <label>主机地址<input id="rHost" class="field" type="text" placeholder="192.168.1.20 或 dev.example.com" spellcheck="false" autocomplete="off"></label>
+        <label>端口<input id="rPort" class="field" type="text" placeholder="22" spellcheck="false" autocomplete="off"></label>
+        <label>用户名<input id="rUser" class="field" type="text" placeholder="root" spellcheck="false" autocomplete="off"></label>
+        <label>密码<input id="rPass" class="field" type="password" placeholder="留空则用密钥登录" autocomplete="off"></label>
+        <label class="full">远端目录<input id="rPath" class="field" type="text" placeholder="/data/decks 或 ~/decks" spellcheck="false" autocomplete="off"></label>
+      </div>
+      <p class="muted small">连接信息会保存在本机，下次自动出现在稿库里，不用重输。密码加密后落盘（防明文，防不了能读你用户目录的人）。主机写 ~/.ssh/config 里的别名也行，此时用户名、端口、密钥按那份配置走。</p>
       <div id="remoteMsg" class="form-msg"></div>
     </section>
     <div class="actions"><button id="submitRemote" class="play small-btn">连接并添加</button></div>

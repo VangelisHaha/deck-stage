@@ -12,8 +12,9 @@ const { isDeckDir, deckLabel, formatTime } = require('./util');
 const STALE_MS = 30 * 1000;
 
 class RemoteDecks {
-  constructor({ onChange }) {
+  constructor({ onChange, passwordFor }) {
     this.onChange = onChange;
+    this.passwordFor = passwordFor || (() => null); // 已保存的连接密码（没有就走密钥）
     this.scans = new Map();   // 稿库地址 → { root, decks, at, error, loading }
     this.owners = new Map();  // 本机镜像目录 → { spec, remoteDir, host }
     this.loaded = false;
@@ -64,6 +65,7 @@ class RemoteDecks {
   async refresh(spec) {
     const r = ssh.parseRemote(spec);
     if (!r) return;
+    r.password = this.passwordFor(r);
     const prev = this.scans.get(spec) || { root: r.path, decks: [], at: 0 };
     this.scans.set(spec, { ...prev, loading: true, error: '' });
     this.onChange();
@@ -128,6 +130,7 @@ class RemoteDecks {
     const own = this.owner(localDir);
     if (!own) return;
     const r = ssh.parseRemote(own.spec);
+    r.password = this.passwordFor(r);
     await ssh.syncDir(r, own.remoteDir, localDir);
   }
 }

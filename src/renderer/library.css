@@ -98,6 +98,16 @@ footer { height: 84px; flex-shrink: 0; background: var(--ink); color: var(--pape
 /* 远端稿库 */
 .rail-gap { margin-top: 10px; }
 .sheet.narrow { width: 560px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; margin-top: 12px; }
+.grid2 label { display: block; font-family: var(--mono); font-size: 11px; letter-spacing: 1px; color: var(--muted); }
+.grid2 label.full { grid-column: 1 / -1; }
+.grid2 .field { margin-top: 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.chip { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px; border: 1px solid var(--ink); background: transparent; font-family: var(--mono); font-size: 12px; color: var(--ink); }
+.chip:hover { background: var(--paper2); }
+.chip .k { color: var(--signal); }
+.chip .x { color: var(--muted); }
+.chip .x:hover { color: var(--signal); }
 .field { width: 100%; margin-top: 10px; height: 40px; padding: 0 12px; border: 1px solid var(--ink); background: var(--paper2); color: var(--ink); font-family: var(--mono); font-size: 14px; outline: none; -webkit-user-select: text; user-select: text; }
 .field:focus { border-color: var(--signal); }
 .form-msg { min-height: 20px; margin-top: 10px; font-size: 13px; color: var(--signal); line-height: 1.6; }

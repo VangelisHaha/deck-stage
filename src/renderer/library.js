@@ -211,30 +211,59 @@
 
   $('q').addEventListener('input', (e) => { query = e.target.value; renderList(); renderBar(); });
   $('addRoot').onclick = () => window.stage.addRoot();
+  const rf = { host: 'rHost', port: 'rPort', user: 'rUser', pass: 'rPass', path: 'rPath' };
+  async function renderConns() {
+    const box = $('savedConns');
+    const list = await window.stage.connections();
+    box.textContent = '';
+    box.hidden = !list.length;
+    for (const c of list) {
+      const b = el('button', 'chip');
+      b.type = 'button';
+      b.appendChild(el('span', '', `${c.user ? c.user + '@' : ''}${c.host}${c.port && c.port !== '22' ? ':' + c.port : ''}`));
+      if (c.hasPassword) b.appendChild(el('span', 'k', '密码已存'));
+      const x = el('span', 'x', '×');
+      x.title = '忘掉这个连接（连同保存的密码）';
+      x.onclick = async (e) => { e.stopPropagation(); await window.stage.forgetConnection(c.id); renderConns(); };
+      b.appendChild(x);
+      b.onclick = () => {
+        $(rf.host).value = c.host; $(rf.port).value = c.port; $(rf.user).value = c.user; $(rf.pass).value = '';
+        $(rf.pass).placeholder = c.hasPassword ? '已保存，留空沿用' : '留空则用密钥登录';
+        $(rf.path).focus();
+      };
+      box.appendChild(b);
+    }
+  }
   function showAddRemote(on) {
     $('addRemote').hidden = !on;
-    if (on) { $('remoteMsg').textContent = ''; $('remoteMsg').className = 'form-msg'; $('remoteSpec').focus(); }
+    if (!on) return;
+    $('remoteMsg').textContent = '';
+    $('remoteMsg').className = 'form-msg';
+    for (const id of Object.values(rf)) $(id).value = '';
+    $(rf.pass).placeholder = '留空则用密钥登录';
+    renderConns();
+    $(rf.host).focus();
   }
   async function submitRemote() {
-    const spec = $('remoteSpec').value.trim();
     const msg = $('remoteMsg');
-    if (!spec) return;
+    const input = { host: $(rf.host).value, port: $(rf.port).value, user: $(rf.user).value, password: $(rf.pass).value, path: $(rf.path).value };
+    if (!input.host.trim()) { msg.textContent = '请填主机地址'; return; }
     const btn = $('submitRemote');
     btn.disabled = true;
     btn.textContent = '连接中…';
     msg.className = 'form-msg';
     msg.textContent = '';
-    const r = await window.stage.addRemote(spec);
+    const r = await window.stage.addRemote(input);
     btn.disabled = false;
     btn.textContent = '连接并添加';
-    if (r.ok) { $('remoteSpec').value = ''; showAddRemote(false); filter = 'all'; refresh(); }
+    if (r.ok) { showAddRemote(false); filter = 'all'; refresh(); }
     else msg.textContent = r.error;
   }
   $('addRemoteRoot').onclick = () => showAddRemote(true);
   $('closeAddRemote').onclick = () => showAddRemote(false);
   $('addRemote').addEventListener('click', (e) => { if (e.target === $('addRemote')) showAddRemote(false); });
   $('submitRemote').onclick = submitRemote;
-  $('remoteSpec').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitRemote(); });
+  for (const id of Object.values(rf)) $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') submitRemote(); });
   $('openSkills').onclick = () => showSkills(true);
   $('closeSkills').onclick = () => showSkills(false);
   $('openRemote').onclick = () => showRemote(true);

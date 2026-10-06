@@ -1,12 +1,26 @@
 'use strict';
 // 远端稿库的底层：解析地址、通过系统 ssh 列出远端的稿子、用 rsync 同步一份稿子。
-// 完全复用系统的 ssh / rsync：~/.ssh/config 的别名、密钥、ssh-agent、跳板机都直接生效，这里不碰密钥。
-// 一律 BatchMode：不弹密码输入，认证不通过就报错，由界面提示用户。
+// 完全复用系统的 ssh / rsync：~/.ssh/config 的别名、密钥、ssh-agent、跳板机都直接生效。
+// 认证两种：默认 BatchMode 免密（密钥 / agent）；给了 r.password 就走密码，经 SSH_ASKPASS 小脚本从环境变量递给 ssh，
+// 密码不上命令行、不落临时文件。
 const { spawn } = require('child_process');
+const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { loginShellEnv } = require('./util');
 
-const SSH_OPTS = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', '-o', 'ServerAliveInterval=10', '-o', 'ServerAliveCountMax=3'];
+const COMMON_OPTS = ['-o', 'ConnectTimeout=8', '-o', 'ServerAliveInterval=10', '-o', 'ServerAliveCountMax=3'];
+let askpassFile = '';
+// 由主进程告诉我们 askpass 脚本放哪（userData 下）
+function configure({ askpass }) { askpassFile = askpass || ''; }
+function ensureAskpass() {
+  if (!askpassFile) throw new Error('密码登录还没初始化');
+  if (!fs.existsSync(askpassFile)) {
+    fs.mkdirSync(path.dirname(askpassFile), { recursive: true });
+    fs.writeFileSync(askpassFile, '#!/bin/sh\nprintf \'%s\\n\' "$DECKSTAGE_SSH_PASS"\n', { mode: 0o700 });
+  }
+  return askpassFile;
+}
 const SKIP_SEG = new Set(['node_modules', '.git', 'lib', 'assets', 'dist']);
 
 // 支持：user@host:/path、host:/path、host:~/path、ssh://user@host[:port]/path
@@ -44,7 +58,10 @@ function canonical(r) {
 function target(r) { return (r.user ? r.user + '@' : '') + r.host; }
 // DECKSTAGE_SSH_OPTS：额外的 ssh 参数（空格分隔，如 `-F /path/config`），给自动化测试和特殊网络环境用
 const extraOpts = () => (process.env.DECKSTAGE_SSH_OPTS || '').split(/\s+/).filter(Boolean);
-function sshBase(r) { return [...(r.port ? ['-p', r.port] : []), ...SSH_OPTS, ...extraOpts()]; }
+function sshBase(r) {
+  const auth = r.password ? ['-o', 'BatchMode=no', '-o', 'NumberOfPasswordPrompts=1'] : ['-o', 'BatchMode=yes'];
+  return [...(r.port ? ['-p', r.port] : []), ...auth, ...COMMON_OPTS, ...extraOpts()];
+}
 function label(r) { return `${r.host}:${path.posix.basename(r.path) || r.path}`; }
 
 const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
@@ -54,8 +71,9 @@ const escRemote = (s) => String(s).replace(/([^A-Za-z0-9_\-./,:@%+=\u0080-￿])/
 // 把 ssh / rsync 的报错翻成用户能照着处理的话
 function explain(stderr, code) {
   const t = String(stderr || '');
-  if (/Permission denied/i.test(t)) return '认证失败：需要能免密登录（密钥或 ssh-agent）。先在终端里 ssh 一次试试';
-  if (/Host key verification failed|REMOTE HOST IDENTIFICATION/i.test(t)) return '主机指纹未确认：先在终端里 ssh 连一次这台机器并确认指纹';
+  if (/Permission denied/i.test(t)) return '认证失败：密码不对，或这个账号不允许该登录方式（没填密码时需要密钥 / ssh-agent 能免密登录）';
+  if (/REMOTE HOST IDENTIFICATION HAS CHANGED/i.test(t)) return '主机指纹和之前记录的不一致：可能是服务器重装，也可能被中间人冒充。确认安全后，在终端执行 ssh-keygen -R 主机名，再重试';
+  if (/Host key verification failed/i.test(t)) return '主机指纹未确认：重新添加一次，在弹出的指纹确认里选信任';
   if (/Could not resolve hostname|Name or service not known|nodename nor servname/i.test(t)) return '找不到这个主机名，检查拼写或 ~/.ssh/config 里的别名';
   if (/timed out|Operation timed out/i.test(t)) return '连接超时，检查网络、VPN 或跳板机';
   if (/Connection refused/i.test(t)) return '连接被拒绝，远端没开 SSH 或端口不对';
@@ -67,8 +85,14 @@ function explain(stderr, code) {
   return line ? line.slice(0, 160) : `命令失败（退出码 ${code}）`;
 }
 
-async function run(cmd, args, { input, timeout = 25000 } = {}) {
-  const env = await loginShellEnv(); // 带上终端里的 SSH_AUTH_SOCK 等
+async function run(cmd, args, { input, timeout = 25000, password } = {}) {
+  const env = { ...(await loginShellEnv()) }; // 带上终端里的 SSH_AUTH_SOCK 等
+  if (password) {
+    env.DECKSTAGE_SSH_PASS = password;
+    env.SSH_ASKPASS = ensureAskpass();
+    env.SSH_ASKPASS_REQUIRE = 'force'; // 没有终端也强制用 askpass（OpenSSH 8.4+，macOS 13 自带 9.x）
+    if (!env.DISPLAY) env.DISPLAY = ':0';
+  }
   return new Promise((resolve, reject) => {
     const p = spawn(cmd, args, { env, stdio: ['pipe', 'pipe', 'pipe'] });
     let out = '';
@@ -106,7 +130,7 @@ done
 
 // 列出远端稿库里的稿子：{ root, decks: [{ remoteDir, mtime(ms), title }] }
 async function scan(r) {
-  const out = await run('ssh', [...sshBase(r), target(r), 'sh', '-s'], { input: scanScript(r.path), timeout: 30000 });
+  const out = await run('ssh', [...sshBase(r), target(r), 'sh', '-s'], { input: scanScript(r.path), timeout: 30000, password: r.password });
   let root = r.path;
   const found = [];
   for (const line of out.split('\n')) {
@@ -131,7 +155,7 @@ async function syncDir(r, remoteDir, localDir) {
   const rsh = ['ssh', ...sshBase(r)].join(' ');
   const args = ['-az', '--delete', '--timeout=30', '--exclude', 'node_modules', '--exclude', '.git',
     '-e', rsh, `${target(r)}:${escRemote(remoteDir)}/`, localDir + '/'];
-  await run('rsync', args, { timeout: 10 * 60 * 1000 });
+  await run('rsync', args, { timeout: 10 * 60 * 1000, password: r.password });
 }
 
 // 添加前的连通性检查：能连上、目录存在，返回里面的稿子数
@@ -140,4 +164,38 @@ async function probe(r) {
   return decks.length;
 }
 
-module.exports = { parseRemote, isRemote, canonical, label, target, scan, syncDir, probe, explain };
+// ---------- 主机指纹：首次连接让用户确认，再写进 known_hosts ----------
+
+// 用 ssh -G 问出真正会连的主机名、端口、known_hosts 文件（别名、~/.ssh/config 都算进去）
+async function effective(r) {
+  const out = await run('ssh', ['-G', ...(r.port ? ['-p', r.port] : []), ...extraOpts(), target(r)], { timeout: 8000 });
+  const get = (k) => (new RegExp(`^${k} (.+)$`, 'mi').exec(out) || [])[1] || '';
+  const home = os.homedir();
+  const file = get('userknownhostsfile').split(/\s+/)[0].replace(/^~/, home) || path.join(home, '.ssh', 'known_hosts');
+  return { hostname: get('hostname') || r.host, port: get('port') || '22', file };
+}
+
+// 返回 { known: true } 或 { known: false, hostSpec, file, keys, fingerprints }；
+// 取不到指纹（比如要经跳板机）时返回 { known: false, unreachable: true }，交给 ssh 自己判断
+async function hostKey(r) {
+  const eff = await effective(r);
+  const hostSpec = eff.port === '22' ? eff.hostname : `[${eff.hostname}]:${eff.port}`;
+  try { await run('ssh-keygen', ['-F', hostSpec, '-f', eff.file], { timeout: 8000 }); return { known: true }; } catch (e) { /* 没记录 */ }
+  let keys = '';
+  try { keys = await run('ssh-keyscan', ['-T', '6', '-p', eff.port, eff.hostname], { timeout: 12000 }); } catch (e) { /* 下面处理 */ }
+  keys = keys.split('\n').filter((l) => l && !l.startsWith('#')).join('\n');
+  if (!keys) return { known: false, unreachable: true };
+  let fingerprints = [];
+  try {
+    const fp = await run('ssh-keygen', ['-lf', '-'], { input: keys + '\n', timeout: 8000 });
+    fingerprints = fp.split('\n').filter(Boolean).map((l) => l.replace(/^\d+\s+/, ''));
+  } catch (e) { /* 只是展示用 */ }
+  return { known: false, hostSpec, file: eff.file, keys, fingerprints };
+}
+
+function trustHostKey(hk) {
+  fs.mkdirSync(path.dirname(hk.file), { recursive: true, mode: 0o700 });
+  fs.appendFileSync(hk.file, hk.keys.endsWith('\n') ? hk.keys : hk.keys + '\n');
+}
+
+module.exports = { parseRemote, isRemote, canonical, label, target, scan, syncDir, probe, explain, configure, hostKey, trustHostKey };
