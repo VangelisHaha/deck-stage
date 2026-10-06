@@ -254,7 +254,7 @@ Agent 通过 macOS 的 `open` 命令和 DeckStage 对话。路径需 URL 编码�
 - [ ] Android App 壳（Capacitor，音量键翻页，锁屏可用）
 - [ ] Windows 适配
 - [ ] iOS App 壳
-- [ ] 预编译安装包（Releases）
+- [x] 预编译安装包（GitHub Releases）
 
 ## 目录结构
 
