@@ -36,6 +36,7 @@ class Presentation {
     this.lastEsc = 0;
     this.typing = false;  // 演讲者窗口开着目录：放映快捷键让位
     this.overlay = false; // 目录或操作指引开着：Esc 先关它们
+    this.lightbox = { audience: false, presenter: false }; // 点图放大的灯箱开着：Esc 先关它
     // 遥控端要用的稿子信息：每页标题、台词、建议用时，以及当前页和计时起点
     this.title = readDeckTitle(root);
     this.slides = [];
@@ -54,7 +55,7 @@ class Presentation {
     this.audience = this.makeWindow('audience', `${this.server.origin}/index.html`);
     this.presenter = this.makeWindow('presenter', `${this.server.origin}/index.html?notes=1`);
     this.audience.on('closed', () => this.end());
-    this.presenter.on('closed', () => { this.presenter = null; this.typing = false; this.overlay = false; this.onChange(); });
+    this.presenter.on('closed', () => { this.presenter = null; this.typing = false; this.overlay = false; this.lightbox.presenter = false; this.onChange(); });
 
     this.applyTarget(this.target, { manual: false });
     this.audience.once('ready-to-show', () => this.audience.show());
@@ -99,7 +100,7 @@ class Presentation {
   reopenPresenter() {
     if (this.presenter) return this.presenter.focus();
     this.presenter = this.makeWindow('presenter', `${this.server.origin}/index.html?notes=1`);
-    this.presenter.on('closed', () => { this.presenter = null; this.typing = false; this.overlay = false; this.onChange(); });
+    this.presenter.on('closed', () => { this.presenter = null; this.typing = false; this.overlay = false; this.lightbox.presenter = false; this.onChange(); });
     this.placePresenter();
     this.presenter.once('ready-to-show', () => { this.presenter.show(); this.presenter.focus(); });
     this.onChange();
@@ -248,6 +249,15 @@ class Presentation {
   onKey(e, input, kind) {
     if (input.type !== 'keyDown' || input.meta || input.control || input.alt) return;
     if (this.typing && input.key.toLowerCase() !== 'escape') return;
+    // 灯箱（点图放大）开着时 Esc 只关灯箱；之后才是目录 / 操作指引，最后才是投屏和结束放映
+    if (input.key === 'Escape' && this.lightbox[kind]) {
+      const win = kind === 'presenter' ? this.presenter : this.audience;
+      if (win && !win.isDestroyed()) {
+        e.preventDefault();
+        win.webContents.send('stage:close-lightbox');
+        return;
+      }
+    }
     // 演讲者窗口里开着目录 / 操作指引时，Esc 先收起它们，不动投屏也不结束放映
     if (kind === 'presenter' && this.overlay && input.key === 'Escape') {
       e.preventDefault();
@@ -272,6 +282,16 @@ class Presentation {
         break;
       default: break;
     }
+  }
+
+  // 演讲者窗口里点图放大：同步到观众窗口
+  relayLb(msg) {
+    if (this.audience && !this.audience.isDestroyed()) this.audience.webContents.send('stage:lb-sync', msg);
+  }
+
+  setLightbox(wc, on) {
+    if (this.audience && !this.audience.isDestroyed() && wc === this.audience.webContents) this.lightbox.audience = !!on;
+    else if (this.presenter && !this.presenter.isDestroyed() && wc === this.presenter.webContents) this.lightbox.presenter = !!on;
   }
 
   // 演讲者窗口的光点 / 划线消息转给观众窗口

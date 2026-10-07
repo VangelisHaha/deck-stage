@@ -13,6 +13,8 @@ html.stage-fs #stage-drag { display: none; }
 #stage-black.on { display: block; }
 .stage-end { margin-left: 12px; height: 32px; padding: 0 14px; border: 1px solid #F1EEE6; background: transparent; color: #F1EEE6; font: 12px "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: 1px; cursor: pointer; white-space: nowrap; }
 .stage-end.confirm { background: #FF4F1F; border-color: #FF4F1F; color: #121212; }
+/* 稿子的框架样式在演讲者视图里把灯箱整个藏了，结果点图「打开」了一个看不见的灯箱。这里让它在演讲者窗口里也显示出来 */
+html.pv #lb.on { display: flex !important; }
 #stage-ink { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 2147482000; pointer-events: none; }
 .stage-end.float { position: fixed; top: 10px; right: 10px; z-index: 2147483000; }
 `;
@@ -41,9 +43,36 @@ const INK_COLOR = '#FF4F1F';
 const INK_WAIT = 3000; // 笔迹停留，之后淡出
 const INK_FADE = 600;
 const DOT_TTL = 5000;
-// 食指指向的手形（24×24 网格，来自 Lucide「pointer」图标，ISC 许可），指尖在 HAND_TIP
-const HAND_TIP = [8, 2];
-const HAND = new Path2D('M22 14a8 8 0 0 1-8 8 M18 11v-1a2 2 0 0 0-2-2a2 2 0 0 0-2 2 M14 10V9a2 2 0 0 0-2-2a2 2 0 0 0-2 2v1 M10 9.5V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v10 M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15');  // 光点长时间没收到消息就收起，防止对端异常时残留
+// 放映启动前选定的投屏光标。目录和矢量路径由主进程统一提供，旧配置自动回退到 macOS 黑箭头 + 小号。
+const POINTER_DATA = ipcRenderer.sendSync('stage:pointer-prefs-get') || {};
+const POINTER_VALUE = POINTER_DATA.value || { style: 'mac', size: 'small' };
+const POINTER_STYLE = (POINTER_DATA.styles || []).find((x) => x.id === POINTER_VALUE.style) || (POINTER_DATA.styles || [])[0];
+const POINTER_SIZE = (POINTER_DATA.sizes || []).find((x) => x.id === POINTER_VALUE.size) || (POINTER_DATA.sizes || [])[0];
+
+function drawPointer(ctx, x, y, rect) {
+  if (!POINTER_STYLE || !POINTER_SIZE) return;
+  const density = Math.max(.85, Math.min(1.35, rect.width / 1600));
+  const scale = (POINTER_SIZE.px * density) / POINTER_STYLE.viewBox;
+  ctx.save();
+  ctx.translate(x - POINTER_STYLE.tip[0] * scale, y - POINTER_STYLE.tip[1] * scale);
+  ctx.scale(scale, scale);
+  for (const layer of POINTER_STYLE.layers) {
+    const shape = new Path2D(layer.path);
+    ctx.shadowColor = layer.shadow || 'transparent';
+    ctx.shadowBlur = layer.shadow ? POINTER_STYLE.viewBox * .1 : 0;
+    ctx.shadowOffsetY = layer.shadow ? POINTER_STYLE.viewBox * .04 : 0;
+    if (layer.fill && layer.fill !== 'none') { ctx.fillStyle = layer.fill; ctx.fill(shape); }
+    ctx.shadowColor = 'transparent';
+    if (layer.stroke && layer.stroke !== 'none' && layer.lineWidth) {
+      ctx.strokeStyle = layer.stroke;
+      ctx.lineWidth = layer.lineWidth;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.stroke(shape);
+    }
+  }
+  ctx.restore();
+}
 
 function makeInk(canvas, getRect) {
   const ctx = canvas.getContext('2d');
@@ -91,23 +120,7 @@ function makeInk(canvas, getRect) {
     if (dot) {
       alive = true;
       const [x, y] = at([dot.x, dot.y]);
-      const size = Math.max(34, r.width * 0.034);
-      const k = size / 24;
-      ctx.save();
-      ctx.translate(x - HAND_TIP[0] * k, y - HAND_TIP[1] * k); // 指尖对准真实位置
-      ctx.scale(k, k);
-      ctx.shadowColor = 'rgba(0,0,0,.45)';
-      ctx.shadowBlur = size * 0.25;
-      ctx.shadowOffsetY = size * 0.06;
-      ctx.fillStyle = INK_COLOR;
-      ctx.fill(HAND);
-      ctx.shadowColor = 'transparent';
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 1.5;
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
-      ctx.stroke(HAND);
-      ctx.restore();
+      drawPointer(ctx, x, y, r);
     }
     if (alive) raf = requestAnimationFrame(frame);
   }
@@ -133,13 +146,63 @@ function makeInk(canvas, getRect) {
   };
 }
 
+function makeHoverMirror(getStage) {
+  let path = [];
+  const fire = (node, type, x, y, relatedTarget, bubbles = false) => {
+    node.dispatchEvent(new MouseEvent(type, {
+      bubbles,
+      clientX: x,
+      clientY: y,
+      relatedTarget
+    }));
+  };
+  const clear = (x = -1, y = -1) => {
+    const oldTarget = path[0] || null;
+    for (const node of path) fire(node, 'mouseleave', x, y, null);
+    if (oldTarget) fire(oldTarget, 'mouseout', x, y, null, true);
+    path = [];
+  };
+  return {
+    move(nx, ny) {
+      const stage = getStage();
+      if (!stage) return clear();
+      const rect = stage.getBoundingClientRect();
+      const x = rect.left + nx * rect.width;
+      const y = rect.top + ny * rect.height;
+      const target = document.elementFromPoint(x, y);
+      if (!target || !stage.contains(target)) return clear(x, y);
+
+      const next = [];
+      for (let node = target; node; node = node.parentElement) {
+        next.push(node);
+        if (node === stage) break;
+      }
+      const oldTarget = path[0] || null;
+      const nextSet = new Set(next);
+      const oldSet = new Set(path);
+      for (const node of path) if (!nextSet.has(node)) fire(node, 'mouseleave', x, y, target);
+      if (oldTarget !== target && oldTarget) fire(oldTarget, 'mouseout', x, y, target, true);
+      for (const node of next.slice().reverse()) if (!oldSet.has(node)) fire(node, 'mouseenter', x, y, oldTarget);
+      if (oldTarget !== target) fire(target, 'mouseover', x, y, oldTarget, true);
+      fire(target, 'mousemove', x, y, oldTarget, true);
+      path = next;
+    },
+    clear
+  };
+}
+
 function initAudienceInk() {
   const canvas = document.createElement('canvas');
   canvas.id = 'stage-ink';
   document.body.appendChild(canvas);
   const stage = () => document.getElementById('stage');
   const ink = makeInk(canvas, () => (stage() || document.documentElement).getBoundingClientRect());
-  ipcRenderer.on('stage:pointer', (_e, m) => ink.apply(m));
+  const hover = makeHoverMirror(stage);
+  ipcRenderer.on('stage:pointer', (_e, m) => {
+    ink.apply(m);
+    if (m.k === 'm') hover.move(m.x, m.y);
+    else if (m.k === 'l') hover.clear();
+  });
 }
 
 // ---------- 演讲者窗口：大画面布局 ----------
@@ -156,10 +219,10 @@ const PV_CSS = `
 #ps-main { flex: 1; min-height: 0; display: flex; }
 #ps-left { flex: 0 0 calc(var(--ps-split, 62) * 1%); min-width: 0; display: flex; flex-direction: column; }
 #ps-area { flex: 1; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; padding: 12px 6px 8px 14px; }
-#ps-box { position: relative; flex: none; overflow: hidden; background: var(--bg0, #0F0F0E); border: 1px solid var(--line2, #333); }
-#ps-box #stage { transform: scale(var(--ps-k, .5)) !important; pointer-events: none; }
-#ps-ink { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 90; cursor: crosshair; }
-#ps-ink.pen { cursor: cell; }
+#ps-box { position: relative; flex: none; overflow: hidden; background: var(--bg0, #0F0F0E); border: 1px solid var(--line2, #333); cursor: crosshair; }
+#ps-box #stage { transform: scale(var(--ps-k, .5)) !important; pointer-events: auto; }
+#ps-ink { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 90; pointer-events: none; }
+#ps-ink.pen { pointer-events: auto; cursor: cell; }
 #ps-split { flex: none; width: 7px; cursor: col-resize; position: relative; }
 #ps-split::after { content: ""; position: absolute; left: 3px; top: 0; bottom: 0; width: 1px; background: var(--line2, #333); }
 #ps-split:hover::after, #ps-split.drag::after { width: 3px; left: 2px; background: #FF4F1F; }
@@ -524,7 +587,7 @@ function initPresenter(styleEl) {
   let pending = null;
   let flushRaf = 0;
   const norm = (e) => {
-    const r = inkCanvas.getBoundingClientRect();
+    const r = box.getBoundingClientRect();
     return [Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), Math.max(0, Math.min(1, (e.clientY - r.top) / r.height))];
   };
   const flush = () => {
@@ -547,11 +610,11 @@ function initPresenter(styleEl) {
     emit({ k: 'e', id: drawing.id });
     drawing = null;
   };
-  inkCanvas.addEventListener('mousemove', (e) => {
+  box.addEventListener('mousemove', (e) => {
     last = norm(e);
     queue(last, drawing ? last : null);
   });
-  inkCanvas.addEventListener('mousedown', (e) => {
+  box.addEventListener('mousedown', (e) => {
     if (e.button !== 0 || !(pen || e.shiftKey)) return;
     e.preventDefault();
     drawing = { id: `${Date.now().toString(36)}-${++strokeN}` };
@@ -559,7 +622,7 @@ function initPresenter(styleEl) {
     queue(last, last);
   });
   window.addEventListener('mouseup', endStroke, true);
-  inkCanvas.addEventListener('mouseleave', () => { endStroke(); last = null; emitRemote({ k: 'l' }); });
+  box.addEventListener('mouseleave', () => { endStroke(); last = null; emitRemote({ k: 'l' }); });
   setInterval(() => { if (last) emitRemote({ k: 'm', x: last[0], y: last[1] }); }, 1500); // 光点心跳，鼠标不动也不会被收起
 
   function togglePen(force) {
@@ -633,9 +696,80 @@ function initPresenter(styleEl) {
   onTick();
 }
 
+// 稿子里点图会弹出灯箱，灯箱开着时稿子自己会吞掉翻页键，看起来像「键盘突然失灵」。
+// 这里在最前面截住翻页键：先收起灯箱，再让这次按键正常翻页（Esc、+ - 0 仍由灯箱自己处理）。
+const PAGE_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' ', 'Enter']);
+function closeLightboxOnPageKey() {
+  window.addEventListener('keydown', (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey || !PAGE_KEYS.has(e.key)) return;
+    const lb = document.getElementById('lb');
+    if (!lb || !lb.classList.contains('on')) return;
+    const close = lb.querySelector('[data-lb="close"]');
+    if (close) close.click();
+  }, true);
+}
+
+// 灯箱（点图放大）开着时告诉主进程：Esc 要先用来关灯箱，而不是退出全屏 / 结束放映
+// 演讲者窗口里点图放大 = 观众屏幕上也放大：打开、缩放、平移、关闭都同步过去（平移量按各自窗口大小折算成比例）
+function watchLightbox() {
+  const lb = document.getElementById('lb');
+  const img = document.getElementById('lbImg');
+  if (!lb || !img) return;
+  const isPresenter = /[?&]notes\b/.test(location.search);
+  const closeBtn = lb.querySelector('[data-lb="close"]');
+  const isOn = () => lb.classList.contains('on');
+
+  const report = () => {
+    ipcRenderer.send('stage:lightbox', isOn());
+    if (!isPresenter) return;
+    if (isOn()) ipcRenderer.send('stage:lb-sync', { op: 'open', src: img.src, cap: (document.getElementById('lbCap') || {}).textContent || '' });
+    else ipcRenderer.send('stage:lb-sync', { op: 'close' });
+  };
+  new MutationObserver(report).observe(lb, { attributes: true, attributeFilter: ['class'] });
+
+  if (isPresenter) {
+    let raf = 0;
+    new MutationObserver(() => {
+      if (raf || !isOn()) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const m = /translate\(([-\d.]+)px,\s*([-\d.]+)px\)\s*scale\(([-\d.]+)\)/.exec(img.style.transform || '');
+        if (!m) return;
+        const r = lb.getBoundingClientRect();
+        ipcRenderer.send('stage:lb-sync', { op: 'xf', s: parseFloat(m[3]), nx: parseFloat(m[1]) / r.width, ny: parseFloat(m[2]) / r.height });
+      });
+    }).observe(img, { attributes: true, attributeFilter: ['style'] });
+  } else {
+    ipcRenderer.on('stage:lb-sync', (_e, m) => {
+      if (m.op === 'open') {
+        if (isOn()) return;
+        // 找到观众这边当前页里同一张图，点一下（稿子自己的点击处理会打开灯箱）
+        const imgs = Array.from(document.querySelectorAll('.slide.on .imgslot.has img, .slide.on [data-avatar] img'));
+        // 图片地址带各窗口自己的防缓存时间戳（?_=…），按路径比
+        const path = (u) => { try { return new URL(u, location.href).pathname; } catch (e) { return u; } };
+        const hit = imgs.find((x) => path(x.currentSrc || x.src) === path(m.src));
+        if (hit) hit.click();
+      } else if (m.op === 'xf') {
+        if (!isOn()) return;
+        const r = lb.getBoundingClientRect();
+        img.style.transform = `translate(${m.nx * r.width}px,${m.ny * r.height}px) scale(${m.s})`;
+        const pct = document.getElementById('lbPct');
+        if (pct) pct.textContent = Math.round(m.s * 100) + '%';
+        lb.classList.toggle('zoomed', m.s > 1.01);
+      } else if (m.op === 'close') {
+        if (isOn() && closeBtn) closeBtn.click();
+      }
+    });
+  }
+
+  ipcRenderer.on('stage:close-lightbox', () => { if (closeBtn) closeBtn.click(); });
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   const root = document.documentElement;
   const isPresenter = /[?&]notes\b/.test(location.search);
+  closeLightboxOnPageKey();
+  watchLightbox();
 
   const style = document.createElement('style');
   style.textContent = CSS;

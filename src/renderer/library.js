@@ -8,6 +8,10 @@
   let query = '';
   let selected = null;
   let remoteInfo = { enabled: false, devices: [] };
+  let playPointer = null;
+  let previewOn = true;
+  try { previewOn = localStorage.getItem('deckstage.preview') !== 'off'; } catch (e) { /* 没有就默认开 */ }
+  const pv = { dir: null, data: null, focus: 0, timer: 0, suspended: false };
 
   function el(tag, cls, text) {
     const n = document.createElement(tag);
@@ -45,7 +49,7 @@
       const count = state.decks.filter((d) => d.root === r.dir).length;
       const rm = r.remote;
       const note = !r.exists ? '（找不到）' : rm && rm.loading ? '（连接中…）' : rm && rm.error ? '（连不上）' : '';
-      const { b, right } = item(r.dir, r.label + note, count, true);
+      const { b, right } = item(r.dir, (r.default ? '默认稿库' : r.label) + note, count, true);
       if (rm) {
         b.title = rm.error ? `SSH ${rm.host}：${rm.error}` : `SSH ${rm.host}`;
         const re = el('span', 'x refresh', '↻');
@@ -54,7 +58,7 @@
         right.appendChild(re);
       }
       const x = el('span', 'x', '×');
-      x.title = '移除这个稿库目录（不删文件）';
+      x.title = r.demo ? '删除示例稿' : r.default ? '移除默认稿库（不删文件，之后不再自动加回）' : '移除这个稿库目录（不删文件）';
       x.onclick = (e) => { e.stopPropagation(); if (filter === r.dir) filter = 'all'; window.stage.removeRoot(r.dir); };
       right.appendChild(x);
       nav.appendChild(b);
@@ -75,7 +79,7 @@
       row.appendChild(el('div', 'idx', pad2(ep ? ep[1] : i + 1)));
       const main = el('div', 'main');
       main.appendChild(el('div', 'title', d.title));
-      const pathLine = el('div', 'path', [d.remote ? 'SSH' : '', d.group, d.rel].filter(Boolean).join(' / '));
+      const pathLine = el('div', 'path', [d.remote ? 'SSH' : '', d.demo ? '示例' : d.group, d.rel].filter(Boolean).join(' / '));
       if (d.remote) pathLine.appendChild(el('span', 'remote-note', d.remote.cached ? '  · 已缓存' : '  · 未同步'));
       main.appendChild(pathLine);
       row.appendChild(main);
@@ -93,11 +97,17 @@
           b.ondblclick = (e) => e.stopPropagation();
           acts.appendChild(b);
         }
+        if (d.demo) {
+          const del = el('button', 'act', '删除示例');
+          del.onclick = (e) => { e.stopPropagation(); window.stage.removeDemo(); };
+          del.ondblclick = (e) => e.stopPropagation();
+          acts.appendChild(del);
+        }
       }
       meta.appendChild(acts);
       row.appendChild(meta);
       row.onclick = () => { selected = d.dir; window.stage.select(selected); renderList(); renderBar(); };
-      row.ondblclick = () => window.stage.open(d.dir);
+      row.ondblclick = () => showPlaySetup(true);
       list.appendChild(row);
     });
 
@@ -107,7 +117,7 @@
     if (!decks.length) {
       let msg = '没有匹配的稿子。';
       if (!state.roots.length) msg = '还没有登记稿库目录。点左下角「+ 添加稿库目录」，选择放稿子的文件夹。';
-      else if (!state.decks.length) msg = '已登记的目录里还没有稿子。让 Agent 用 deck-html skill 生成一份，回到这里会自动出现。';
+      else if (!state.decks.length) msg = `已登记的目录里还没有稿子。让 Agent 用 deck-html skill 生成一份，默认会放在 ${state.defaultRoot || '默认稿库'}，回到这里会自动出现。`;
       list.appendChild(el('div', 'empty', msg));
     } else {
       list.appendChild(el('div', 'empty', 'skills 生成的新稿子放进已登记的目录，回到这个窗口会自动出现。'));
@@ -128,6 +138,8 @@
     }
     $('play').disabled = !selected;
     $('reveal').style.visibility = selected ? 'visible' : 'hidden';
+    $('installDemo').hidden = !!(state.demo && state.demo.installed);
+    syncPreview();
   }
 
   function renderSkills() {
@@ -143,6 +155,151 @@
         ? '已安装 · ' + state.skills.agents.map((a) => a.agent).join('、')
         : '还没收到 Agent 的回报。装好后这里会变成「已安装 · Agent 名」。'));
   }
+
+  function renderPointerSetup() {
+    if (!state || !state.pointer || !playPointer) return;
+    const deck = state.decks.find((d) => d.dir === selected);
+    $('pointerDeck').textContent = deck ? deck.title : '';
+    const styles = $('pointerStyles');
+    styles.textContent = '';
+    for (const style of state.pointer.styles) {
+      const b = el('button', 'pointer-choice' + (style.id === playPointer.style ? ' on' : ''));
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(style.id === playPointer.style));
+      const img = el('img');
+      img.alt = '';
+      img.src = style.previews[playPointer.size];
+      b.append(img, el('b', '', style.name), el('small', '', style.note));
+      b.onclick = () => { playPointer.style = style.id; renderPointerSetup(); };
+      styles.appendChild(b);
+    }
+    const sizes = $('pointerSizes');
+    sizes.textContent = '';
+    for (const size of state.pointer.sizes) {
+      const b = el('button', 'pointer-size' + (size.id === playPointer.size ? ' on' : ''), `${size.name}号 · ${size.px}px`);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(size.id === playPointer.size));
+      b.onclick = () => { playPointer.size = size.id; renderPointerSetup(); };
+      sizes.appendChild(b);
+    }
+  }
+
+  function showPlaySetup(on) {
+    $('playSetup').hidden = !on;
+    pv.suspended = !!on;
+    if (on) closeZoom();
+    syncPreview();
+    if (!on) return;
+    playPointer = Object.assign({}, state.pointer.value);
+    renderPointerSetup();
+  }
+
+  async function confirmPlay() {
+    if (!selected || !playPointer) return;
+    const dir = selected;
+    await window.stage.setPointer(playPointer);
+    showPlaySetup(false);
+    window.stage.open(dir);
+  }
+
+  // ---- 预览浮窗：目录 + 每页缩略图 ----
+  function syncPreview() {
+    const main = document.querySelector('main');
+    $('togglePreview').textContent = previewOn ? '预览：开' : '预览：关';
+    const deck = state && state.decks.find((d) => d.dir === selected);
+    const show = previewOn && !!deck && !pv.suspended; // 选光标 / 开始放映的弹窗开着时，先把预览浮窗收起来
+    main.classList.toggle('with-preview', show);
+    $('preview').hidden = !show;
+    if (!show) { pv.dir = null; return; }
+    if (pv.dir === selected && pv.mtime === deck.mtime) return;
+    pv.dir = selected;
+    pv.mtime = deck.mtime;
+    pv.data = null;
+    pv.focus = 0;
+    pv.title = deck.title;
+    renderPreview();
+    clearTimeout(pv.timer);
+    pv.timer = setTimeout(() => loadPreview(selected), 180); // 在列表里连按上下键时不要每一份都去渲染
+  }
+
+  async function loadPreview(dir) {
+    const r = await window.stage.previewGet(dir);
+    if (pv.dir !== dir) return;
+    pv.data = r;
+    if (pv.focus >= (r.slides || []).length) pv.focus = 0;
+    renderPreview();
+  }
+
+  function setPreviewFocus(i) {
+    pv.focus = i;
+    const s = pv.data && pv.data.slides && pv.data.slides[i];
+    $('pvImg').removeAttribute('src');
+    if (s && s.thumb) $('pvImg').src = s.thumb;
+    document.querySelectorAll('#pvList li').forEach((li, k) => li.classList.toggle('on', k === i));
+  }
+
+  function renderPreview() {
+    const r = pv.data;
+    $('pvTitle').textContent = (r && r.title) || pv.title || '';
+    const slides = (r && r.slides) || [];
+    const got = slides.filter((s) => s.thumb).length;
+    const msg = {
+      'remote-unsynced': '这份远端稿子还没同步到本机，放映或导出一次后就能预览。',
+      none: '这份稿子无法预览。',
+      busy: '放映中，暂不生成预览。',
+      error: `预览生成失败：${(r && r.message) || '未知原因'}（稿子能正常放映就不影响使用）`
+    };
+    let meta = '';
+    let hero = '';
+    if (!r) { meta = '正在读取…'; hero = '正在生成预览…'; }
+    else if (msg[r.state]) { hero = msg[r.state]; }
+    else {
+      meta = `${r.total} 页${r.minutes ? ` · 约 ${r.minutes} 分钟` : ''}${r.state === 'working' ? ` · 生成中 ${got}/${r.total}` : ''}`;
+      if (!slides.length) hero = '正在生成预览…';
+    }
+    $('pvMeta').textContent = meta;
+    $('pvState').textContent = hero;
+    const list = $('pvList');
+    list.textContent = '';
+    $('pvImg').style.display = slides.length && !msg[r && r.state] ? '' : 'none';
+    slides.forEach((s, i) => {
+      const li = el('li', i === pv.focus ? 'on' : '');
+      li.appendChild(el('span', 'no', pad2(i + 1)));
+      const th = el('span', 'th');
+      if (s.thumb) { const im = el('img'); im.alt = ''; im.src = s.thumb; th.appendChild(im); }
+      li.appendChild(th);
+      li.appendChild(el('span', 'tt', s.title));
+      li.onmouseenter = () => setPreviewFocus(i);
+      li.onclick = () => openZoom(i);
+      li.ondblclick = () => showPlaySetup(true); // 双击预览里的某一页 = 开始放映这份稿子
+      list.appendChild(li);
+    });
+    setPreviewFocus(Math.min(pv.focus, Math.max(0, slides.length - 1)));
+  }
+
+  // ---- 放大查看（点大图 / 点目录行 / 空格）----
+  const zoom = { i: 0 };
+  function zoomSlides() { return (pv.data && pv.data.slides) || []; }
+  function showZoom(i) {
+    const slides = zoomSlides();
+    if (!slides.length) return;
+    zoom.i = Math.max(0, Math.min(slides.length - 1, i));
+    const s = slides[zoom.i];
+    $('zImg').removeAttribute('src');
+    if (s.thumb) $('zImg').src = s.thumb;
+    $('zCap').textContent = `${pad2(zoom.i + 1)} / ${pad2(slides.length)} · ${s.title}`;
+    $('zPrev').disabled = zoom.i === 0;
+    $('zNext').disabled = zoom.i === slides.length - 1;
+    setPreviewFocus(zoom.i);
+    const row = document.querySelectorAll('#pvList li')[zoom.i];
+    if (row) row.scrollIntoView({ block: 'nearest' });
+  }
+  function openZoom(i) {
+    if (!zoomSlides().length) return;
+    $('pvZoom').hidden = false;
+    showZoom(i == null ? pv.focus : i);
+  }
+  function closeZoom() { $('pvZoom').hidden = true; }
 
   async function refreshRemote() {
     remoteInfo = await window.stage.remoteGet();
@@ -211,6 +368,22 @@
 
   $('q').addEventListener('input', (e) => { query = e.target.value; renderList(); renderBar(); });
   $('addRoot').onclick = () => window.stage.addRoot();
+  $('installDemo').onclick = () => window.stage.installDemo();
+  $('togglePreview').onclick = () => {
+    previewOn = !previewOn;
+    try { localStorage.setItem('deckstage.preview', previewOn ? 'on' : 'off'); } catch (e) { /* 记不住就算了 */ }
+    pv.dir = null;
+    syncPreview();
+  };
+  $('pvClose').onclick = () => $('togglePreview').click();
+  document.querySelector('.pv-hero').onclick = () => openZoom();
+  document.querySelector('.pv-hero').ondblclick = () => showPlaySetup(true);
+  $('zImg').ondblclick = () => showPlaySetup(true); // 放大图上双击也一样
+  $('zPrev').onclick = () => showZoom(zoom.i - 1);
+  $('zNext').onclick = () => showZoom(zoom.i + 1);
+  $('zClose').onclick = closeZoom;
+  $('pvZoom').addEventListener('click', (e) => { if (e.target === $('pvZoom') || e.target.tagName === 'FIGURE') closeZoom(); });
+  window.stage.onPreviewUpdate((dir) => { if (dir === pv.dir) loadPreview(dir); });
   const rf = { host: 'rHost', port: 'rPort', user: 'rUser', pass: 'rPass', path: 'rPath' };
   async function renderConns() {
     const box = $('savedConns');
@@ -276,18 +449,29 @@
   $('revealSkill').onclick = () => window.stage.revealSkill();
   $('copyPath').onclick = async (e) => { await window.stage.copy(state.skills.dir); flash(e.target, '已复制'); };
   $('copyPrompt').onclick = async (e) => { await window.stage.copy(state.skills.prompt); flash(e.target, '已复制'); };
-  $('play').onclick = () => { if (selected) window.stage.open(selected); };
+  $('play').onclick = () => { if (selected) showPlaySetup(true); };
+  $('closePlaySetup').onclick = () => showPlaySetup(false);
+  $('playSetup').addEventListener('click', (e) => { if (e.target === $('playSetup')) showPlaySetup(false); });
+  $('confirmPlay').onclick = confirmPlay;
   $('reveal').onclick = () => { if (selected) window.stage.reveal(selected); };
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { if (!$('addRemote').hidden) showAddRemote(false); else if (!$('remote').hidden) showRemote(false); else if (!$('skills').hidden) showSkills(false); else if (query) { $('q').value = ''; query = ''; renderList(); renderBar(); } return; }
+    if (!$('pvZoom').hidden) {
+      if (e.key === 'Escape' || e.key === ' ') { e.preventDefault(); closeZoom(); }
+      else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); showZoom(zoom.i + 1); }
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); showZoom(zoom.i - 1); }
+      return;
+    }
+    if (e.key === ' ' && document.activeElement !== $('q') && $('playSetup').hidden && $('skills').hidden && $('remote').hidden && $('addRemote').hidden && !$('preview').hidden && zoomSlides().length) { e.preventDefault(); openZoom(); return; }
+    if (e.key === 'Escape') { if (!$('playSetup').hidden) showPlaySetup(false); else if (!$('addRemote').hidden) showAddRemote(false); else if (!$('remote').hidden) showRemote(false); else if (!$('skills').hidden) showSkills(false); else if (query) { $('q').value = ''; query = ''; renderList(); renderBar(); } return; }
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); $('q').focus(); return; }
+    if (!$('playSetup').hidden) { if (e.key === 'Enter') { e.preventDefault(); confirmPlay(); } return; }
     if (!$('skills').hidden || !$('remote').hidden || !$('addRemote').hidden || document.activeElement === $('q') && e.key !== 'Enter' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
     const decks = visibleDecks();
     const i = decks.findIndex((d) => d.dir === selected);
     if (e.key === 'ArrowDown' && i < decks.length - 1) { e.preventDefault(); selected = decks[i + 1].dir; window.stage.select(selected); renderList(); renderBar(); }
     else if (e.key === 'ArrowUp' && i > 0) { e.preventDefault(); selected = decks[i - 1].dir; window.stage.select(selected); renderList(); renderBar(); }
-    else if (e.key === 'Enter' && selected) { e.preventDefault(); window.stage.open(selected); }
+    else if (e.key === 'Enter' && selected) { e.preventDefault(); showPlaySetup(true); }
   });
 
   window.stage.onChanged(refresh);

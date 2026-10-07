@@ -4,11 +4,12 @@ const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
 const { expandHome, isDir } = require('./util');
+const { DEFAULT_POINTER, normalizePointer } = require('./pointer');
 
 // 首次启动时预置的稿库目录（不存在的会被过滤掉）。默认为空，由用户在稿库里添加。
 const SEED_ROOTS = [];
 
-const EMPTY = { roots: [], recent: [], skillAgents: [], hotReload: false, trusted: {}, presenter: {} };
+const EMPTY = { roots: [], recent: [], skillAgents: [], hotReload: false, trusted: {}, presenter: {}, pointer: DEFAULT_POINTER, demo: {}, defaults: {} };
 
 function file() { return path.join(app.getPath('userData'), 'config.json'); }
 
@@ -16,6 +17,7 @@ function read() {
   try {
     const cfg = Object.assign({}, EMPTY, JSON.parse(fs.readFileSync(file(), 'utf8')));
     cfg.roots = (cfg.roots || []).map(expandHome);
+    cfg.pointer = normalizePointer(cfg.pointer);
     return cfg;
   } catch (e) {
     if (e.code === 'ENOENT') {
@@ -28,6 +30,7 @@ function read() {
 }
 
 function write(cfg) {
+  cfg.pointer = normalizePointer(cfg.pointer);
   fs.mkdirSync(path.dirname(file()), { recursive: true });
   fs.writeFileSync(file(), JSON.stringify(cfg, null, 2));
 }

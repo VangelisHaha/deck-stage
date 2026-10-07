@@ -52,7 +52,7 @@ id 是内核的接口，不要改名：
 | `window.__slides` | 所有 `.slide` 节点数组 |
 | `window.__toast(msg, ms)` | 底部提示，`ms=0` 表示不自动消失 |
 | `window.__assetsReady` | 素材装载完成的 Promise，导出前会 await 它 |
-| `window.__lbOpen` | 灯箱是否开着（内核用它吞掉翻页） |
+| `window.__lbOpen` | 灯箱是否开着（开着时点屏幕不翻页；翻页键会先收起灯箱再翻页） |
 
 ## 配置字段
 
@@ -132,6 +132,6 @@ gradientText: [ { sel: 'h2.t em', color: '#FFC94D' } ]
 | `←` `↑` `PageUp` | 上一页 |
 | `Home` / `End` | 首页 / 末页 |
 | `F` | 全屏 |
-| 灯箱开着时：`Esc` 关闭、`+` `-` 缩放、`0` 复位 | 这些键在 capture 阶段被拦，不会翻页 |
+| 灯箱开着时：`Esc` 关闭、`+` `-` 缩放、`0` 复位 | 这些键在 capture 阶段被拦，不会翻页。**翻页键（方向键、PageUp/PageDown、空格、回车、Home/End）会先收起灯箱再翻页**，不会出现「点了图之后键盘没反应」 |
 
 点屏幕左 22% / 右 22% 也能翻页；点工具条、圆点、图片、灯箱不会误翻。

@@ -47,8 +47,11 @@ description: 用固定的 HTML 放映框架做技术分享演示稿。用户说�
 ## 新建一份稿子
 
 ```bash
-<SKILL_DIR>/scripts/new_deck.sh <目标目录> "稿子标题"
+<SKILL_DIR>/scripts/new_deck.sh "稿子标题"                # 默认建在 ~/Documents/DeckStage/<标题>/（推荐）
+<SKILL_DIR>/scripts/new_deck.sh <目标目录> "稿子标题"      # 用户指定了位置时
 ```
+
+**默认稿库**：`~/Documents/DeckStage/` 由 DeckStage 启动时自动建好并登记，建在这里的稿子直接出现在 DeckStage 稿库里，不用问用户放哪、不用登记。没装 DeckStage 也照常能用（`./serve.sh`）。
 
 脚本自己推算模板位置，所以这个 skill 放在哪都能跑。它会拷模板、建 `assets/`、把 `DECK_TITLE` / `DECK_SLUG` 占位符换成真实值（`DECK_SLUG` 用于 BroadcastChannel 频道名，纯中文标题会退回时间戳），并打印下一步。
 
@@ -57,7 +60,7 @@ description: 用固定的 HTML 放映框架做技术分享演示稿。用户说�
 1. 改 `index.html` 的 `<style>` 定风格。
 2. 每页写一个 `<section class="slide" data-t="...">`。
 3. 每页在 `notes.js` 里配一条同名台词。
-4. 跑体检，再开浏览器看。
+4. 跑体检，通过后**引导用户去 DeckStage 看**：`<SKILL_DIR>/scripts/open_in_deckstage.sh <稿子目录>`，在稿库里选中它（不自动放映），然后告诉用户「已在 DeckStage 里选中，右侧浮窗可先看目录和缩略图，回车放映」。没装 DeckStage 就让用户 `./serve.sh` 再开浏览器看。
 
 ## 体检
 

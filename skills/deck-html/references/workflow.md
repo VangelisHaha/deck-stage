@@ -4,7 +4,7 @@
 
 ## 新建
 
-1. `scripts/new_deck.sh <目标目录> "标题"` 生成骨架（含 `AGENTS.md` 协作约定模板）。目标目录放在 DeckStage 已登记的稿库目录下，没有合适目录先问用户。
+1. `scripts/new_deck.sh "标题"` 生成骨架（含 `AGENTS.md` 协作约定模板），**默认建在 `~/Documents/DeckStage/<标题>/`**——这是 DeckStage 的默认稿库，启动时自动登记，建在这里稿子会直接出现在 DeckStage 里，**不用问用户放哪、也不用登记目录**。用户明确指定了别的位置，才用 `new_deck.sh <目标目录> "标题"`。
 2. 先定内容再定样式：写清受众、主线、每一段要讲几分钟，把结论写进 `AGENTS.md` 的「这是什么」。
 3. 改 `index.html` 的 `<style>` 定风格；每页一个 `<section class="slide" data-t="…">`；每页在 `notes.js` 里配同名台词。
 4. 页数多、一份稿子里有很多页内容时，参考 `references/split-deck.md` 拆分。
@@ -25,7 +25,7 @@
 
 1. 跑体检（`check_deck.py`；拆分稿用 `check_split.py`），0 error 才算完。
 2. **不逐页截图验证。** 截图又慢又容易把服务搞崩。告诉用户改了哪几页、重点看什么，让他自己看。
-3. 如果有 DeckStage：`open "deckstage://open?path=<稿子目录，URL 编码>"` 在稿库里选中它（不要加 `play=1`）。
+3. **引导用户去 DeckStage 看**：跑 `scripts/open_in_deckstage.sh <稿子目录>`（它会做 URL 编码并 `open "deckstage://open?path=…"`，在稿库里选中这份稿子，不会自动开始放映；稿子不在已登记的稿库里时 DeckStage 会自动登记它所在的目录）。然后告诉用户：「已在 DeckStage 里选中《标题》，右侧浮窗能先看目录和缩略图，回车开始放映」。没装 DeckStage 的机器脚本只打印提示，照常告诉用户用 `./serve.sh` 放映。
 
 ## 数据口径
 

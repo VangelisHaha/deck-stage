@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>DeckStage</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src data:">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src data: file:">
 <link rel="stylesheet" href="library.css">
 </head>
 <body>
@@ -20,6 +20,7 @@
     </div>
     <button id="openRemote" class="remote-btn"><span id="remoteDot" class="dot"></span><span id="remoteText">手机遥控 · 关</span></button>
     <button id="addRoot" class="link-paper">+ 添加稿库目录</button>
+    <button id="installDemo" class="link-paper rail-gap" hidden>+ 安装示例稿</button>
     <button id="addRemoteRoot" class="link-paper rail-gap">+ 添加远端目录（SSH）</button>
   </aside>
 
@@ -30,12 +31,55 @@
     </header>
     <div class="search"><input id="q" type="text" placeholder="搜索标题" spellcheck="false"><span class="mono muted">⌘F</span></div>
     <div id="list"></div>
+    <aside id="preview" hidden>
+      <div class="pv-head">
+        <div class="pv-titles"><div id="pvTitle" class="pv-title"></div><div id="pvMeta" class="pv-meta mono muted"></div></div>
+        <button id="pvClose" class="link-ink" title="收起预览">收起</button>
+      </div>
+      <div class="pv-hero"><img id="pvImg" alt=""><div id="pvState" class="pv-state"></div></div>
+      <ol id="pvList" class="pv-list"></ol>
+    </aside>
     <footer id="bar">
       <div id="status"></div>
+      <button id="togglePreview" class="link-paper">预览</button>
       <button id="reveal" class="link-paper">在 Finder 中显示</button>
       <button id="play" class="play">开始放映　⏎</button>
     </footer>
   </main>
+</div>
+
+<div id="playSetup" class="modal" hidden>
+  <div class="sheet pointer-sheet">
+    <div class="sheet-head">
+      <div>
+        <h2>投屏光标</h2>
+        <p class="muted">鼠标移入演讲者画面时，观众屏幕会看到这个光标。</p>
+      </div>
+      <button id="closePlaySetup" class="link-ink">取消 Esc</button>
+    </div>
+    <section>
+      <div class="pointer-heading"><span>选择样式</span><span id="pointerDeck" class="mono muted"></span></div>
+      <div id="pointerStyles" class="pointer-styles"></div>
+    </section>
+    <section>
+      <div class="pointer-heading"><span>光标大小</span><span class="muted">小号适合日常投屏</span></div>
+      <div id="pointerSizes" class="pointer-sizes"></div>
+    </section>
+    <div class="pointer-actions">
+      <span class="muted small">设置会保留到下次放映</span>
+      <button id="confirmPlay" class="play">开始放映　⏎</button>
+    </div>
+  </div>
+</div>
+
+<div id="pvZoom" class="modal zoom" hidden>
+  <button id="zPrev" class="zbtn" title="上一页 ←">‹</button>
+  <figure>
+    <img id="zImg" alt="">
+    <figcaption><span id="zCap" class="mono"></span><span class="mono muted"> · ← → 翻页 · 空格 / Esc 关闭</span></figcaption>
+  </figure>
+  <button id="zNext" class="zbtn" title="下一页 →">›</button>
+  <button id="zClose" class="link-paper zclose">关闭 Esc</button>
 </div>
 
 <div id="addRemote" class="modal" hidden>

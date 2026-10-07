@@ -14,6 +14,10 @@ const ssh = require('./ssh');
 const connections = require('./connections');
 const { RemoteDecks } = require('./remote-decks');
 const { createUpdateManager } = require('./updater');
+const { normalizePointer, pointerCatalog } = require('./pointer');
+const demo = require('./demo');
+const defaults = require('./defaults');
+const { Previews } = require('./preview');
 
 app.setName('DeckStage');
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -32,6 +36,12 @@ const remoteDecks = new RemoteDecks({
   passwordFor: (r) => connections.password(r)
 });
 const remoteRoots = (roots) => roots.filter(ssh.isRemote);
+
+// 稿库里的预览：放映中不画（占 CPU），其余时候在屏幕外渲染，画好一张推一次给稿库窗口
+const previews = new Previews({
+  canRender: () => !presentation,
+  onUpdate: (dir) => { if (library && !library.isDestroyed()) library.webContents.send('stage:preview-update', dir); }
+});
 
 // 手机遥控：默认关闭，需要时在稿库里手动开启。放映状态变化时广播给所有已连手机。
 const remote = new RemoteServer({
@@ -59,11 +69,13 @@ function buildState() {
   return {
     roots: cfg.roots.map((dir) => (ssh.isRemote(dir)
       ? { dir, label: ssh.label(ssh.parseRemote(dir)), exists: true, remote: remoteDecks.rootInfo(dir) }
-      : { dir, label: path.basename(dir), exists: isDir(dir) })),
+      : { dir, label: path.basename(dir), exists: isDir(dir), demo: demo.isDemoRoot(dir), default: defaults.isDefaultRoot(dir) })),
     decks: [
       ...scanRoots(cfg.roots.filter((r) => !ssh.isRemote(r) && isDir(r))),
       ...remoteRoots(cfg.roots).flatMap((spec) => remoteDecks.decks(spec))
-    ].sort((a, b) => b.mtime - a.mtime),
+    ].map((d) => (demo.isDemoRoot(d.root) ? { ...d, demo: true } : d)).sort((a, b) => b.mtime - a.mtime),
+    demo: { installed: demo.installed() },
+    defaultRoot: defaults.rootDir(),
     recent: cfg.recent.map((r) => r.dir),
     selected: selectedDir,
     plan: planInfo(),
@@ -72,9 +84,10 @@ function buildState() {
     exporting: Object.fromEntries(exporting),
     remote: remote.summary(),
     toast: toastText,
+    pointer: { value: cfg.pointer, ...pointerCatalog() },
     skills: {
       dir: skill.skillDir(),
-      prompt: skill.installPrompt({ roots: cfg.roots }),
+      prompt: skill.installPrompt({ roots: cfg.roots, defaultRoot: defaults.rootDir() }),
       agents: cfg.skillAgents
     }
   };
@@ -112,6 +125,7 @@ const actions = {
     const r = await dialog.showOpenDialog({ title: '添加稿库目录', properties: ['openDirectory'] });
     if (r.canceled || !r.filePaths[0]) return;
     store.addRoot(r.filePaths[0]);
+    defaults.noteAdded(r.filePaths[0]);
     pushState();
   },
   // 添加远端稿库。input 是表单对象 { host, port, user, password, path }，或 ssh 地址字符串（Agent 通过 deckstage:// 来的）。
@@ -307,15 +321,22 @@ function handleUrl(raw) {
       }
       if (!target || !isDir(target)) return toast('Agent 请求登记的目录不存在');
       store.addRoot(path.resolve(target));
+      defaults.noteAdded(path.resolve(target));
       toast(`已登记稿库目录：${path.basename(target)}`);
       break;
     }
     case 'open': {
       const root = target && resolveDeckRoot(target);
       if (!root) return toast('Agent 请求打开的稿子不存在');
+      // 稿子不在任何已登记的稿库里（比如 Agent 把稿子建在了别处）：把它所在的目录登记进来，否则稿库里找不到它
+      if (!store.read().roots.some((r) => !ssh.isRemote(r) && (root === r || root.startsWith(r + path.sep)))) {
+        store.addRoot(path.dirname(root));
+        toast(`稿子不在稿库里，已登记它所在的目录：${path.basename(path.dirname(root))}`);
+      } else {
+        toast('Agent 刚更新了一份稿子，已为你选中');
+      }
       selectedDir = root; // 只选中，不自动开始放映，避免突然投到大屏
       showLibrary();
-      toast('Agent 刚更新了一份稿子，已为你选中');
       if (u.searchParams.get('play') === '1' && !presentation) startPresentation(root);
       break;
     }
@@ -344,7 +365,7 @@ function handleArgv(argv) {
 function showLibrary() {
   if (library && !library.isDestroyed()) { library.show(); library.focus(); return; }
   library = new BrowserWindow({
-    width: 1120, height: 700, minWidth: 900, minHeight: 600,
+    width: 1360, height: 760, minWidth: 980, minHeight: 600,
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 14 },
     backgroundColor: '#F1EEE6',
@@ -376,7 +397,11 @@ ipcMain.on('stage:pointer', (e, msg) => {
 });
 // 演讲者窗口里正在搜索框打字：放映快捷键（F/D/B/P）先让位
 ipcMain.on('stage:typing', (e, on) => { if (fromPresenter(e)) presentation.typing = !!on; });
+ipcMain.on('stage:lb-sync', (e, msg) => { if (fromPresenter(e) && msg && typeof msg === 'object') presentation.relayLb(msg); });
+ipcMain.on('stage:lightbox', (e, on) => { if (presentation) presentation.setLightbox(e.sender, on); });
 ipcMain.on('stage:overlay', (e, on) => { if (fromPresenter(e)) presentation.overlay = !!on; });
+// 投屏光标：放映窗口同步读取当前设置；稿库面板保存后，下次创建窗口立即生效
+ipcMain.on('stage:pointer-prefs-get', (e) => { e.returnValue = { value: store.read().pointer, ...pointerCatalog() }; });
 // 演讲者视图的布局偏好（布局档、分栏比例、台词字号）
 ipcMain.on('stage:prefs-get', (e) => { e.returnValue = store.read().presenter || {}; });
 ipcMain.on('stage:prefs-set', (e, p) => {
@@ -385,8 +410,22 @@ ipcMain.on('stage:prefs-set', (e, p) => {
   store.update((c) => { c.presenter = clean; });
 });
 ipcMain.handle('stage:get-state', () => buildState());
+ipcMain.handle('stage:pointer-set', (_e, prefs) => {
+  const clean = normalizePointer(prefs);
+  store.update((c) => { c.pointer = clean; });
+  pushState();
+  return clean;
+});
 ipcMain.handle('stage:add-root', () => actions.addRootDialog());
-ipcMain.handle('stage:remove-root', (_e, dir) => { store.removeRoot(dir); if (ssh.isRemote(dir)) remoteDecks.forget(dir); pushState(); });
+ipcMain.handle('stage:preview-get', (_e, dir, retry) => {
+  if (remoteDecks.owner(dir) && !isDeckDir(dir)) return { state: 'remote-unsynced' };
+  if (!isDeckDir(dir)) return { state: 'none' };
+  if (retry) previews.failed.delete(dir);
+  return previews.get(dir);
+});
+ipcMain.handle('stage:demo-install', () => { demo.install(); toast('已装回示例稿'); });
+ipcMain.handle('stage:demo-remove', () => { demo.remove(); toast('示例稿已删除'); });
+ipcMain.handle('stage:remove-root', (_e, dir) => { if (demo.isDemoRoot(dir)) { demo.remove(); toast('示例稿已删除'); return; } if (defaults.isDefaultRoot(dir)) { defaults.markRemoved(); pushState(); return; } store.removeRoot(dir); if (ssh.isRemote(dir)) remoteDecks.forget(dir); pushState(); });
 ipcMain.handle('stage:add-remote', (_e, input) => actions.addRemote(input));
 ipcMain.handle('stage:connections', () => connections.list());
 ipcMain.handle('stage:forget-connection', (_e, id) => { connections.remove(id); });
@@ -420,6 +459,7 @@ app.on('activate', () => { if (presentation) presentation.bringFront(); else sho
 app.on('window-all-closed', () => { if (!presentation) app.quit(); });
 
 app.whenReady().then(() => {
+  const firstRun = !fs.existsSync(store.file()); // 没有配置文件 = 第一次运行
   if (app.isPackaged) app.setAsDefaultProtocolClient('deckstage');
   // 开发模式没有打包图标，手动设置 dock 图标
   if (!app.isPackaged && app.dock) app.dock.setIcon(path.join(__dirname, '..', 'build', 'icon.png'));
@@ -431,6 +471,8 @@ app.whenReady().then(() => {
     getWindow: () => library,
     toast
   });
+  demo.ensure({ firstRun });
+  defaults.ensure();
   ssh.configure({ askpass: path.join(app.getPath('userData'), 'askpass.sh') });
   remoteDecks.load();
   rebuildMenu();

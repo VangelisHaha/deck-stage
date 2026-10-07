@@ -8,9 +8,9 @@ DeckStage 是放映这类稿子的 Mac 应用：无浏览器地址栏、双屏�
 
 | 场景 | 做法 |
 |---|---|
-| 新稿子放哪 | DeckStage 已登记的稿库目录里（目录列表在 `~/Library/Application Support/DeckStage/config.json` 的 `roots`）。没有合适目录先问用户 |
+| 新稿子放哪 | **默认稿库 `~/Documents/DeckStage/`**：DeckStage 每次启动都会确保它存在并登记进稿库，`new_deck.sh "标题"` 默认就建在这里，不用问用户、不用登记。用户指定了别的目录才另说（目录列表在 `~/Library/Application Support/DeckStage/config.json` 的 `roots`）。用户在稿库里把默认稿库移除过的话，它不会自动回来，此时让用户在稿库里「添加稿库目录」选回来 |
 | 登记新目录 | 用户同意后：`open "deckstage://add-root?path=<绝对路径>"` |
-| 稿子改完 | 先体检，通过后：`open "deckstage://open?path=<稿子目录>"`。只会在稿库里选中，不会自动开始放映 |
+| 稿子改完 | 先体检，通过后跑 `scripts/open_in_deckstage.sh <稿子目录>`（等价于 `open "deckstage://open?path=<稿子目录>"`，已处理 URL 编码）。只会在稿库里选中，不会自动开始放映；稿子不在已登记的稿库里时，DeckStage 会自动登记它所在的目录。**每次新建或大改完都要做这一步，并告诉用户去 DeckStage 看** |
 | 装好 skill 后回报 | `open "deckstage://skill-installed?agent=<你的名字>"` |
 
 约束：
@@ -52,6 +52,14 @@ DeckStage 的行为：
 - 动作写死在服务里，不接受页面传来的命令、路径。同一时间只执行一个动作，防连点。
 - 服务脚本里不要写死群 id、webhook、密钥：这些放配置文件，且配置文件不随稿子分发（见 `workflow.md` 的脱敏）。
 - 页面里的按钮要处理「服务没起」：进页时探测 `/health`，失败就提示，而不是点了才报错。
+
+## 稿库里的预览
+
+用户在 DeckStage 稿库里选中稿子，右侧浮窗会显示目录和每页缩略图（放映前先看个大概）。它靠这几样，稿子要保持：
+
+- 每页一个 `#slides > .slide`，且有 `data-t`（目录显示的就是它）
+- 页面脚本能在无服务的情况下渲染出内容（预览只起静态服务，不启动 `deckstage.json` 的后台服务）
+- 动效在 `body.exporting` 下直接显示终态（预览和导出 PPTX 都靠这个；见 `effects.md` 的两条规则）
 
 ## 远端稿库（稿子在另一台机器上）
 

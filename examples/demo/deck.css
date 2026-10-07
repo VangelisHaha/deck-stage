@@ -1,0 +1,290 @@
+/* ============================================================
+   deck-html · 框架样式（固定层）
+
+   这个文件只管「放映器长什么样」：舞台缩放、翻页容器、页脚、
+   进度条、圆点、工具条、图位、灯箱、导出模式、演讲者视图。
+   它不含任何风格：配色、字号、卡片、栅格全部由每份稿子自己的
+   <style> 决定。
+
+   ⚠️ 改这个文件等于改所有稿子。要调风格请在 index.html 的
+   <style> 里覆盖，不要动这里。
+
+   框架依赖的变量（在稿子里覆盖即可换肤）：
+     --font --mono                 字体
+     --bg0                         底色
+     --ink --ink2 --ink3 --ink4 --ink5   文字由亮到暗
+     --line --line2                描边
+     --accent --accent2 --accent3  强调色（主 / 次 / 第三）
+     --accent-dim --accent2-dim --accent3-dim   对应低透明底
+     --rail1 --rail2 --rail3       页脚台阶条的三级色（缺省跟随 accent）
+   ============================================================ */
+
+:root{
+  --font:"PingFang SC","Noto Sans SC","HarmonyOS Sans SC","Microsoft YaHei",-apple-system,sans-serif;
+  --mono:"SF Mono","JetBrains Mono","Menlo","Consolas",monospace;
+
+  --bg0:#101014;
+  --ink:#FFFFFF;
+  --ink2:#E8E8EE;
+  --ink3:#AAAAB8;
+  --ink4:#77778A;
+  --ink5:#4C4C5C;
+
+  --line:rgba(170,170,184,.16);
+  --line2:rgba(170,170,184,.30);
+
+  --accent:#5B8CFF;
+  --accent2:#FFC94D;
+  --accent3:#3FD9A8;
+  --accent-dim:rgba(91,140,255,.14);
+  --accent2-dim:rgba(255,201,77,.13);
+  --accent3-dim:rgba(63,217,168,.13);
+
+  --rail1:var(--accent);
+  --rail2:var(--accent2);
+  --rail3:var(--accent3);
+}
+
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg0);}
+body{font-family:var(--font);color:var(--ink2);-webkit-font-smoothing:antialiased;}
+
+/* ============================================================
+   舞台：固定画布等比缩放适配窗口
+   画布尺寸由 deck.config.js 的 W/H 决定，deck.js 会写进这两个变量
+   ============================================================ */
+#stage{
+  position:fixed;left:50%;top:50%;
+  width:var(--deck-w,1600px);height:var(--deck-h,900px);
+  transform-origin:center center;
+  transform:translate(-50%,-50%) scale(1);
+}
+#bg{position:absolute;inset:0;overflow:hidden;}
+.bokeh{position:absolute;border-radius:50%;filter:blur(26px);opacity:.5;
+  animation:deck-drift linear infinite;}
+@keyframes deck-drift{
+  0%{transform:translate(0,0) scale(1);}
+  33%{transform:translate(30px,-38px) scale(1.12);}
+  66%{transform:translate(-24px,26px) scale(.92);}
+  100%{transform:translate(0,0) scale(1);}
+}
+
+/* ---------- 顶部进度 ---------- */
+#prog{position:absolute;left:0;top:0;height:3px;z-index:60;width:0;
+  background:linear-gradient(90deg,var(--accent),var(--accent2) 55%,var(--accent3));
+  transition:width .45s cubic-bezier(.22,1,.36,1);}
+
+/* ---------- 幻灯片容器 ---------- */
+.slide{position:absolute;inset:0;padding:58px 68px 62px;
+  display:none;flex-direction:column;z-index:10;}
+.slide.on{display:flex;}
+.slide.cover{padding:0;align-items:center;justify-content:center;}
+.body{flex:1;min-height:0;display:flex;flex-direction:column;}
+.body.vc{justify-content:center;}
+
+/* 入场动画：给子元素加 .an + .dN 控制先后 */
+.slide.on .an{animation:deck-rise .62s cubic-bezier(.22,1,.36,1) both;}
+@keyframes deck-rise{from{opacity:0;transform:translateY(26px);}to{opacity:1;transform:none;}}
+@keyframes deck-pop{from{opacity:0;transform:scale(.9);}to{opacity:1;transform:none;}}
+@keyframes deck-slideL{from{opacity:0;transform:translateX(-30px);}to{opacity:1;transform:none;}}
+.slide.on .an.pop{animation-name:deck-pop;}
+.slide.on .an.sl{animation-name:deck-slideL;}
+.d1{animation-delay:.05s}.d2{animation-delay:.12s}.d3{animation-delay:.19s}
+.d4{animation-delay:.26s}.d5{animation-delay:.33s}.d6{animation-delay:.40s}
+.d7{animation-delay:.47s}.d8{animation-delay:.54s}.d9{animation-delay:.61s}
+.d10{animation-delay:.68s}.d11{animation-delay:.75s}.d12{animation-delay:.82s}
+.d13{animation-delay:.89s}.d14{animation-delay:.96s}.d15{animation-delay:1.03s}
+.d16{animation-delay:1.10s}
+
+/* ---------- 页脚：台阶条 + 页码（由 deck.js 注入） ---------- */
+.footer{position:absolute;left:56px;right:56px;bottom:22px;z-index:40;
+  display:flex;align-items:center;justify-content:space-between;
+  font-size:12.5px;color:var(--ink5);letter-spacing:.08em;}
+.footer .pno{font-family:var(--mono);font-size:12px;color:var(--ink4);}
+.footer .pno b{color:var(--accent);font-weight:700;}
+.footer .steps{display:flex;align-items:center;gap:9px;letter-spacing:.05em;}
+.footer .steps > i{width:6px;height:6px;border-radius:50%;background:var(--accent);
+  font-style:normal;margin-right:3px;flex:none;}
+.footer .st{display:inline-flex;align-items:center;gap:6px;padding:3px 11px;border-radius:999px;
+  border:1px solid transparent;background:transparent;
+  font-size:11.5px;font-weight:600;color:var(--ink5);white-space:nowrap;
+  transition:color .28s ease,background .28s ease,border-color .28s ease;}
+.footer .st b{font-family:var(--mono);font-weight:800;opacity:.7;}
+.footer .st.done{color:var(--ink4);}
+.footer .sep{color:var(--ink5);font-size:10px;opacity:.55;}
+.footer .st.on{font-weight:800;}
+.footer .st.on b{opacity:1;}
+.footer .st.on.l1{color:var(--rail1);border-color:var(--line2);background:var(--accent-dim);}
+.footer .st.on.l2{color:var(--rail2);border-color:var(--line2);background:var(--accent2-dim);}
+.footer .st.on.l3{color:var(--rail3);border-color:var(--line2);background:var(--accent3-dim);}
+
+/* ---------- 图位占位：图不在就保留虚线框，不留空洞 ---------- */
+.imgslot{position:relative;border-radius:16px;border:2px dashed var(--line2);
+  display:flex;align-items:center;justify-content:center;overflow:hidden;
+  min-height:120px;}
+.imgslot .ic{font-size:30px;opacity:.4;}
+.imgslot.has{border-style:none;}
+.imgslot img{width:100%;height:100%;object-fit:contain;display:block;}
+
+/* ---------- 工具条 / 提示 ---------- */
+#tools{position:fixed;right:20px;top:16px;z-index:200;display:flex;gap:9px;}
+#tools button{display:flex;align-items:center;gap:7px;font-family:var(--font);
+  font-size:12.5px;font-weight:700;color:var(--ink3);cursor:pointer;
+  padding:8px 14px;border-radius:10px;border:1px solid var(--line2);
+  background:rgba(0,0,0,.6);transition:all .22s;}
+#tools button:hover{color:var(--ink);border-color:var(--accent);background:var(--accent-dim);}
+#tools button:disabled{opacity:.5;cursor:progress;}
+#toast{position:fixed;left:50%;bottom:34px;transform:translate(-50%,20px);z-index:300;
+  padding:12px 22px;border-radius:12px;font-size:13.5px;font-weight:700;
+  background:rgba(0,0,0,.9);border:1px solid var(--accent);color:var(--ink);
+  opacity:0;pointer-events:none;transition:all .3s;}
+#toast.on{opacity:1;transform:translate(-50%,0);}
+
+/* ---------- 圆点导航 ---------- */
+#dots{position:fixed;left:50%;bottom:8px;transform:translateX(-50%);z-index:150;
+  display:flex;gap:5px;padding:6px 10px;border-radius:999px;background:rgba(0,0,0,.5);}
+#dots i{width:6px;height:6px;border-radius:50%;background:var(--ink5);cursor:pointer;
+  transition:all .25s;font-style:normal;}
+#dots i:hover{background:var(--ink3);transform:scale(1.3);}
+#dots i.on{background:var(--accent);width:18px;border-radius:3px;}
+
+/* ============================================================
+   图片灯箱：点图放大，滚轮缩放、拖拽平移
+   ============================================================ */
+.imgslot.has img,[data-avatar] img{cursor:zoom-in;}
+#lb{position:fixed;inset:0;z-index:320;display:none;
+  background:rgba(0,0,0,.93);backdrop-filter:blur(10px);
+  align-items:center;justify-content:center;overflow:hidden;}
+#lb.on{display:flex;}
+#lb .stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;}
+#lb img{max-width:92vw;max-height:88vh;border-radius:10px;
+  box-shadow:0 30px 90px rgba(0,0,0,.7);
+  transform-origin:center center;user-select:none;-webkit-user-drag:none;
+  transition:transform .16s cubic-bezier(.22,.9,.3,1);}
+#lb.drag img{transition:none;cursor:grabbing;}
+#lb.zoomed img{cursor:grab;}
+#lb .cap{position:absolute;left:0;right:0;bottom:22px;text-align:center;
+  font-size:14px;color:var(--ink3);pointer-events:none;padding:0 40px;}
+#lb .cap b{color:var(--ink);font-weight:700;}
+#lb .hint{display:block;margin-top:6px;font-size:12.5px;color:var(--ink5);font-family:var(--mono);}
+#lb .bar{position:absolute;top:20px;right:22px;display:flex;gap:8px;align-items:center;}
+#lb .bar button{font-family:var(--mono);font-size:13px;font-weight:700;
+  color:var(--ink2);background:rgba(0,0,0,.8);border:1px solid var(--line);
+  border-radius:9px;padding:8px 13px;cursor:pointer;transition:all .18s;}
+#lb .bar button:hover{color:var(--ink);border-color:var(--accent);background:var(--accent-dim);}
+#lb .pct{font-family:var(--mono);font-size:12.5px;color:var(--ink4);
+  min-width:52px;text-align:center;}
+
+/* ============================================================
+   导出模式
+   html2canvas 不支持 background-clip:text，渐变文字必须降级成纯色。
+   降级规则不写在这里 —— 每份稿子在 deck.config.js 的 gradientText
+   里登记，deck.js 启动时注入。check_deck.py 会校验有没有漏登记。
+   ============================================================ */
+.exporting *{animation:none !important;transition:none !important;}
+.exporting #tools,.exporting #dots,.exporting #toast,.exporting #lb{display:none !important;}
+.exporting .bokeh{filter:blur(30px) !important;}
+
+/* ============================================================
+   演讲者视图 · index.html?notes=1
+   主屏放观众视图，小屏放这个，BroadcastChannel 双向同步
+   布局：顶栏（页码/标题/计时/翻页）→ 台词（可滚）→ 幻灯预览条
+   ============================================================ */
+.pv #dots,.pv #tools,.pv #lb{display:none !important;}
+.pv .bokeh{animation:none !important;}
+/* 观众舞台在演讲者视图里降级成缩略图，钉进 .shot.now，左上角为缩放原点。
+   ready 这个类名不能叫 mini，否则会被下面 .mini 的规则连带命中。 */
+.pv #stage{position:absolute;left:0;top:0;transform-origin:0 0;
+  transform:scale(.001);opacity:0;transition:opacity .2s;}
+.pv #stage.ready{opacity:1;}
+#pv{display:none;}
+.pv #pv{display:flex;flex-direction:column;position:fixed;inset:0;
+  background:var(--bg0);z-index:50;}
+
+#pv .pvtop{flex:none;display:flex;align-items:center;gap:14px;
+  padding:11px 16px 10px;border-bottom:1px solid var(--line);}
+#pv .pvno{font-family:var(--mono);font-size:13px;color:var(--ink4);flex:none;}
+#pv .pvno b{font-size:26px;color:var(--accent2);letter-spacing:-.5px;}
+#pv .pvttl{flex:1;min-width:0;font-size:20px;font-weight:700;color:var(--ink);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#pv .pvclock{flex:none;display:flex;gap:12px;align-items:baseline;font-family:var(--mono);}
+#pv .pvtot{font-size:23px;font-weight:700;color:var(--ink2);}
+#pv .pvpg{font-size:14px;color:var(--ink4);}
+#pv .pvpg.warn{color:var(--accent2);}
+#pv .pvpg.over{color:#FF6FB5;font-weight:700;}
+#pv .pvlink{flex:none;display:flex;align-items:center;font-family:var(--mono);font-size:11px;}
+#pv .pvlink i{width:8px;height:8px;border-radius:50%;background:#FF6FB5;
+  display:inline-block;margin-right:5px;}
+#pv .pvlink.ok i{background:var(--accent3);}
+#pv .pvlink em{color:var(--ink4);font-style:normal;}
+#pv .pvnav{flex:none;display:flex;gap:7px;}
+#pv .pvnav button{width:44px;height:36px;border-radius:10px;cursor:pointer;font-size:15px;
+  font-family:var(--font);border:1px solid var(--line2);
+  background:var(--accent-dim);color:var(--ink2);
+  transition:.16s;-webkit-tap-highlight-color:transparent;}
+#pv .pvnav button:hover{border-color:var(--accent);color:var(--ink);}
+#pv .pvnav button:active{transform:scale(.94);}
+#pv .pvnav button:disabled{opacity:.28;cursor:default;}
+#pv .pvnav #pvNext{width:62px;color:var(--ink);border-color:var(--accent);}
+
+/* 台词正文 —— 装不下就上下滑 */
+#pv .pvbody{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  padding:22px 28px 18px;
+  font-size:clamp(18px,1.85vw,25px);line-height:1.88;color:var(--ink);
+  letter-spacing:.01em;-webkit-overflow-scrolling:touch;}
+#pv .pvbody p{margin:0 0 1em;}
+#pv .pvbody b{color:var(--accent2);font-weight:700;}
+#pv .pvbody .cue{margin:0 0 1em;padding:7px 13px;border-left:3px solid var(--accent3);
+  background:var(--accent3-dim);border-radius:0 8px 8px 0;
+  font-size:.72em;line-height:1.6;color:var(--accent3);font-style:normal;}
+#pv .pvbody .none{color:var(--ink4);font-style:italic;}
+#pv .pvbody::-webkit-scrollbar{width:9px;}
+#pv .pvbody::-webkit-scrollbar-thumb{background:var(--line2);border-radius:5px;}
+#pv .pvbody::-webkit-scrollbar-track{background:var(--line);}
+
+/* 连不上主屏时的自解释提示 */
+#pv .pvwarn{flex:none;display:none;padding:10px 18px;font-size:13px;line-height:1.62;
+  background:rgba(255,45,149,.13);border-bottom:1px solid rgba(255,45,149,.3);color:#FF9AC9;}
+#pv .pvwarn.on{display:block;}
+#pv .pvwarn b{color:var(--accent2);}
+#pv .pvwarn code{font-family:var(--mono);font-size:12.5px;color:var(--ink2);}
+
+/* 幻灯预览条：全页横向滚动，当前页那格用观众舞台本体，其余按需填克隆 */
+#pv .pvshots{flex:none;display:flex;gap:10px;align-items:center;
+  padding:11px 16px 9px;overflow-x:auto;overflow-y:hidden;
+  overscroll-behavior-x:contain;border-top:1px solid var(--line);
+  background:rgba(0,0,0,.35);}
+#pv.fold .pvshots{display:none;}
+#pv .pvshots::-webkit-scrollbar{height:9px;}
+#pv .pvshots::-webkit-scrollbar-thumb{background:var(--line2);border-radius:5px;}
+#pv .pvshots::-webkit-scrollbar-track{background:var(--line);border-radius:5px;}
+#pv .shot{position:relative;overflow:hidden;flex:none;border-radius:9px;cursor:pointer;
+  background:var(--bg0);border:1px solid var(--line2);opacity:.52;
+  transition:opacity .16s,border-color .16s;}
+#pv .shot:hover{opacity:.95;border-color:var(--accent);}
+#pv .shot.now{opacity:1;cursor:default;border-color:var(--accent2);
+  box-shadow:0 6px 22px rgba(0,0,0,.45);}
+#pv .shot .cap{position:absolute;left:0;right:0;bottom:0;z-index:70;padding:3px 7px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.02em;color:var(--ink3);
+  background:linear-gradient(0deg,rgba(0,0,0,.95) 34%,transparent);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;}
+#pv .shot.now .cap{color:var(--accent2);font-size:10.5px;}
+#pv .shot.now .cap::before{content:'观众正在看 · ';opacity:.75;}
+/* 克隆节点撑在整张画布上再整体缩放 */
+#pv .shot > .mini{position:absolute;left:0;top:0;
+  width:var(--deck-w,1600px);height:var(--deck-h,900px);
+  transform-origin:0 0;pointer-events:none;}
+#pv .shot > .mini > .slide{display:flex !important;}
+#pv .shot > .mini .an{animation:none !important;}
+
+/* 窄屏（笔记本竖排 / 平板）：标题让位，预览缩小 */
+@media (max-width:760px){
+  #pv .pvttl{font-size:16px;}
+  #pv .pvtot{font-size:19px;}
+  #pv .pvbody{padding:16px 16px 12px;font-size:18px;line-height:1.82;}
+  #pv .pvclock{gap:8px;}
+  #pv .pvnav button{width:40px;height:34px;}
+  #pv .pvnav #pvNext{width:52px;}
+  #pv .pvlink em{display:none;}
+  #pv .pvshots{padding:9px 12px 11px;gap:8px;}
+}

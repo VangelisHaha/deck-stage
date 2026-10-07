@@ -524,7 +524,7 @@ window.__assetsReady = (function(){
    5 图片灯箱
    点图弹出大图，滚轮以鼠标位置为锚点缩放、按住拖拽平移
    双击在 100% / 250% 之间切换，Esc 关闭
-   灯箱开着期间吞掉所有翻页按键与点击翻页，避免误翻页
+   灯箱开着时点击不翻页；按翻页键（方向键 / PageUp / PageDown / 空格 / 回车 / Home / End）会先收起灯箱再翻页
    ============================================================ */
 (function(){
   var lb  = document.getElementById('lb');
@@ -611,10 +611,13 @@ window.__assetsReady = (function(){
     dragging = false; lb.classList.remove('drag');
   });
 
-  /* capture 阶段先拦，放映内核收不到 */
+  /* capture 阶段先拦，放映内核收不到。
+     翻页键例外：先收起灯箱，再放行给内核正常翻页——点了图之后按方向键，应该是翻页而不是没反应 */
+  var PAGE_KEYS = ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','PageUp','PageDown','Home','End',' ','Enter'];
   document.addEventListener('keydown', function(e){
     if(!window.__lbOpen) return;
     var k = e.key;
+    if(!e.metaKey && !e.ctrlKey && !e.altKey && PAGE_KEYS.indexOf(k) >= 0){ close(); return; }
     if(k === 'Escape')              close();
     else if(k === '+' || k === '=') zoomCenter(1.25);
     else if(k === '-' || k === '_') zoomCenter(1/1.25);
