@@ -398,6 +398,8 @@ ipcMain.on('stage:pointer', (e, msg) => {
 // 演讲者窗口里正在搜索框打字：放映快捷键（F/D/B/P）先让位
 ipcMain.on('stage:typing', (e, on) => { if (fromPresenter(e)) presentation.typing = !!on; });
 ipcMain.on('stage:lb-sync', (e, msg) => { if (fromPresenter(e) && msg && typeof msg === 'object') presentation.relayLb(msg); });
+ipcMain.on('stage:dom-sync', (e, msg) => { if (fromPresenter(e) && msg && typeof msg === 'object') presentation.relayDom(msg); });
+ipcMain.on('stage:dom-sync-ready', (e) => { if (presentation && presentation.audience && !presentation.audience.isDestroyed() && e.sender === presentation.audience.webContents) presentation.requestDomSync(); });
 ipcMain.on('stage:lightbox', (e, on) => { if (presentation) presentation.setLightbox(e.sender, on); });
 ipcMain.on('stage:overlay', (e, on) => { if (fromPresenter(e)) presentation.overlay = !!on; });
 // 投屏光标：放映窗口同步读取当前设置；稿库面板保存后，下次创建窗口立即生效

@@ -765,11 +765,71 @@ function watchLightbox() {
   ipcRenderer.on('stage:close-lightbox', () => { if (closeBtn) closeBtn.click(); });
 }
 
+// 页内交互状态同步：稿子里带 data-sync 的区块，演讲者窗口里发生的变化（按钮状态、文字、显隐）原样同步到观众窗口。
+// 只同步结果，不重放点击，所以「发送」这类有副作用的按钮不会在观众窗口再执行一遍。区块本身的属性不管（留给翻页动效）。
+const SYNC_ATTRS = new Set(['class', 'hidden', 'disabled', 'style', 'aria-pressed', 'aria-expanded', 'aria-checked', 'value', 'open']);
+function watchSyncZones() {
+  const isPresenter = /[?&]notes\b/.test(location.search);
+  const zones = () => Array.from(document.querySelectorAll('[data-sync]'));
+  const pathOf = (zone, node) => {
+    const path = [];
+    for (let n = node; n && n !== zone; n = n.parentNode) {
+      if (!n.parentNode) return null; // 已经被摘下来
+      path.unshift(Array.prototype.indexOf.call(n.parentNode.childNodes, n));
+    }
+    return path;
+  };
+  const nodeAt = (zone, path) => path.reduce((n, i) => (n ? n.childNodes[i] : null), zone);
+
+  if (isPresenter) {
+    const send = (m) => ipcRenderer.send('stage:dom-sync', m);
+    const snapshot = (z, zi) => z.querySelectorAll('*').forEach((el) => {
+      const attrs = {};
+      for (const a of el.attributes) if (SYNC_ATTRS.has(a.name)) attrs[a.name] = a.value;
+      send({ zi, path: pathOf(z, el), op: 'attrs', attrs });
+    });
+    new MutationObserver((records) => {
+      const list = zones();
+      if (!list.length) return;
+      for (const r of records) {
+        const zi = list.findIndex((z) => z.contains(r.target));
+        if (zi < 0) continue;
+        const z = list[zi];
+        if (r.type === 'attributes') {
+          if (r.target === z || !SYNC_ATTRS.has(r.attributeName)) continue;
+          const v = r.target.getAttribute(r.attributeName);
+          send({ zi, path: pathOf(z, r.target), op: 'attr', name: r.attributeName, value: v });
+        } else if (r.type === 'characterData') {
+          send({ zi, path: pathOf(z, r.target), op: 'text', value: r.target.data });
+        } else if (r.type === 'childList' && r.target.nodeType === 1) {
+          send({ zi, path: pathOf(z, r.target), op: 'html', value: r.target.innerHTML });
+        }
+      }
+    }).observe(document.documentElement, { subtree: true, attributes: true, characterData: true, childList: true });
+    // 观众窗口刚打开 / 重新加载时，把当前状态补发一遍
+    ipcRenderer.on('stage:dom-sync-hello', () => zones().forEach(snapshot));
+  } else {
+    ipcRenderer.on('stage:dom-sync', (_e, m) => {
+      const z = zones()[m.zi];
+      if (!z || !Array.isArray(m.path)) return;
+      const n = nodeAt(z, m.path);
+      if (!n) return;
+      if (m.op === 'attr') { if (m.value === null) n.removeAttribute(m.name); else n.setAttribute(m.name, m.value); } else if (m.op === 'attrs') {
+        for (const a of Array.from(n.attributes)) if (SYNC_ATTRS.has(a.name) && !(a.name in m.attrs)) n.removeAttribute(a.name);
+        for (const [k, v] of Object.entries(m.attrs)) n.setAttribute(k, v);
+      } else if (m.op === 'text') n.data = m.value;
+      else if (m.op === 'html') n.innerHTML = m.value;
+    });
+    ipcRenderer.send('stage:dom-sync-ready');
+  }
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   const root = document.documentElement;
   const isPresenter = /[?&]notes\b/.test(location.search);
   closeLightboxOnPageKey();
   watchLightbox();
+  watchSyncZones();
 
   const style = document.createElement('style');
   style.textContent = CSS;

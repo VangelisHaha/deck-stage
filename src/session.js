@@ -289,6 +289,15 @@ class Presentation {
     if (this.audience && !this.audience.isDestroyed()) this.audience.webContents.send('stage:lb-sync', msg);
   }
 
+  // 稿子里 data-sync 区块的变化：演讲者 → 观众；观众页载入后让演讲者补发当前状态
+  relayDom(msg) {
+    if (this.audience && !this.audience.isDestroyed()) this.audience.webContents.send('stage:dom-sync', msg);
+  }
+
+  requestDomSync() {
+    if (this.presenter && !this.presenter.isDestroyed()) this.presenter.webContents.send('stage:dom-sync-hello');
+  }
+
   setLightbox(wc, on) {
     if (this.audience && !this.audience.isDestroyed() && wc === this.audience.webContents) this.lightbox.audience = !!on;
     else if (this.presenter && !this.presenter.isDestroyed() && wc === this.presenter.webContents) this.lightbox.presenter = !!on;
