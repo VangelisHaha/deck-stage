@@ -3,8 +3,25 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0F0F0E">
 <title>DeckStage 遥控</title>
-<style>body{margin:0;background:#0F0F0E;color:#F1EEE6;font:16px -apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh}</style>
+<link rel="stylesheet" href="remote.css">
+<link rel="stylesheet" href="connection.css">
 </head>
-<body>DeckStage 遥控 · 环境验证页</body>
+<body><main class="screen connection">
+<div class="kicker"><span class="sq"></span>DECKSTAGE · REMOTE</div>
+<h1>连接电脑<br>开始遥控</h1>
+<p class="sub">在电脑 DeckStage 左下角打开「手机遥控」，手机和电脑连接同一个 Wi-Fi。</p>
+<button id="scan" class="next scan" type="button"><span>扫码连接</span><span aria-hidden="true">↗</span></button>
+<p class="sub scan-hint">扫描电脑「手机遥控」面板的二维码，直接配对。</p>
+<div class="divider label">或输入地址</div>
+<form id="connectForm">
+<label class="label" for="address">电脑上显示的遥控地址</label>
+<input id="address" type="text" inputmode="url" autocomplete="url" autocapitalize="off" spellcheck="false" placeholder="192.168.1.10:18899" required>
+<button id="connect" class="outline" type="submit">连接电脑</button>
+<div id="error" class="err" role="alert"></div>
+</form>
+<p class="sub hint">手动连接后输入电脑上的 6 位配对码。也可以粘贴完整二维码链接。</p>
+<p class="sub hint">放映时用音量键翻页，默认音量 + 上一页、音量 − 下一页。遥控页面内可调整映射。返回键回到这里更换电脑。</p>
+</main><script src="connection.js"></script><script src="app.js"></script></body>
 </html>

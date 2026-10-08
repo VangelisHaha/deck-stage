@@ -1,0 +1,11 @@
+/* 连接页只补布局，颜色、字体、按钮来自遥控页公共样式。 */
+.connection { max-width: 480px; margin: 0 auto; }
+.scan { width: 100%; height: 88px; margin-top: 32px; font-size: 28px; }
+.scan-hint { font-size: 12px; }
+.divider { margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--rule); }
+#connectForm { margin-top: 18px; display: flex; flex-direction: column; }
+#address { margin: 10px 0 18px; padding: 14px 0; width: 100%; border: 0; border-bottom: 2px solid var(--paper); background: transparent; color: var(--paper); font-family: var(--mono); font-size: 16px; outline: 0; -webkit-user-select: text; user-select: text; }
+#address:focus { border-bottom-color: var(--signal); }
+#address::placeholder { color: var(--dim); }
+.hint { font-size: 12px; }
+button:disabled { opacity: .5; cursor: wait; }

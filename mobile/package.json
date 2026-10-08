@@ -4,8 +4,9 @@
   "private": true,
   "description": "DeckStage 手机遥控 App 壳（Capacitor）",
   "scripts": {
-    "sync": "cap sync",
-    "android": "cap open android"
+    "sync": "npm run prepare:web && cap sync",
+    "android": "cap open android",
+    "prepare:web": "node scripts/prepare-web.cjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",

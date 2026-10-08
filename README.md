@@ -206,7 +206,26 @@ macOS 本地安装可运行 `npm run install-app`；开发时可以带稿子目�
 | 翻页、台词、跳页、黑屏、计时 | ✓ | ✓ |
 | 防息屏（Wake Lock） | 支持的浏览器自动启用 | ✓ |
 | 翻页震动 | 仅 Android 浏览器，不支持就不显示 | ✓ |
-| 音量键翻页 | 不显示 | 规划中，见下 |
+| 音量键翻页 | 不显示 | 前台支持，可调整映射 |
+
+### Android App 使用与构建
+
+打开 App，优先点「扫码连接」扫描电脑「手机遥控」面板的二维码，识别后自动配对；也可以输入电脑「手机遥控」面板的地址（如 `192.168.1.10:18899`），或粘贴二维码的完整链接。普通地址连接后输入 6 位配对码；完整二维码链接可直接配对。App 记住上次的电脑地址，不保存二维码令牌。首次扫码需允许相机权限，取消扫码回到连接页；不相关的二维码会提示重新扫描。扫码使用本地 ZXing 识别，不依赖 Google Play 服务。返回键回到连接页，可以更换电脑。
+
+遥控页与网页共用实现，随 APK 打包，支持台词、翻页、跳页、黑屏和计时。台词默认 28px，顶部信息和底部翻页收成一行；字号、黑屏、跳页和按键设置集中到「更多」。音量 + 默认上一页、音量 − 默认下一页，可在遥控页调整。保持前台时不息屏；锁屏翻页尚未支持。远端页面使用独立 WebView，不暴露本地 Capacitor 插件。
+
+```bash
+cd mobile
+npm ci
+npm run sync -- android
+cd android
+source ../scripts/android-env.sh
+./gradlew assembleDebug
+cd ../..
+python3 mobile/scripts/check-apk.py mobile/android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+本机 Debug 签名可能与 GitHub 构建签名不同，无法覆盖时用 `./gradlew assembleDebug -PremoteSmoke` 构建独立测试包（名称「DeckStage 遥控 · 测试」、包名后缀 `.smoke`），保留已安装正式包的数据。连接页复用 `src/remote/remote.css`，原生控件的颜色也从这份样式生成；`npm run sync -- android` 会统一同步。GitHub 发布流程会检查 APK 内的连接页、扫码和原生遥控实现，拒绝占位页。
 
 ### 给 App 壳留的接口
 
@@ -261,8 +280,8 @@ Agent 通过 macOS 的 `open` 命令和 DeckStage 对话。路径需 URL 编码�
 
 - 只在 macOS 13（Intel）上测试过。Apple Silicon 和更新的系统理论上可用，没验证
 - Windows 适配在规划中：全屏、菜单、协议注册、字体、打包都要改
-- 手机遥控只在浏览器模拟的手机视口里验证过，没在真机上测过；iOS Safari、Android Chrome 是目标
-- Android App 壳目前只有脚手架（`mobile/`），音量键、连接页都还没做
+- Android 遥控 App 已在 vivo V2405A 真机验证连接、配对、台词、翻页、跳页、黑屏及音量键；iOS Safari 尚未真机验证
+- Android App 已提供连接页：输入电脑遥控地址或粘贴二维码完整链接，接入网页遥控；前台音量键翻页与防息屏已实现。锁屏翻页尚未实现
 - iOS 原生 App 暂时做不了：Capacitor 8 要求 Xcode 26，需要较新的 macOS
 - 导出的 PPTX 是截图式的，文字不可编辑
 - 远端稿库：远端是 Windows 的未测试；真正跨机器的 SSH（别的主机、跳板机）、密码登录成功的完整流程，我只在本机回环的 sshd 上验证过（本机 sshd 无法校验密码，密码只验证到「正确送达 ssh」这一步）
@@ -271,7 +290,8 @@ Agent 通过 macOS 的 `open` 命令和 DeckStage 对话。路径需 URL 编码�
 
 - [x] 稿库、双窗口、投屏切换、快捷键、skill 联动
 - [x] 手机网页遥控（局域网，扫码 / 配对码）
-- [ ] Android App 壳（Capacitor，音量键翻页，锁屏可用）
+- [x] Android App 连接页、网页遥控接入、前台音量键翻页、防息屏
+- [ ] Android 锁屏翻页
 - [ ] Windows 适配
 - [ ] iOS App 壳
 - [x] 预编译安装包（GitHub Releases）
@@ -299,7 +319,7 @@ src/menu.js          菜单栏
 src/deck-preload.js  注入放映窗口：光标自隐、黑屏、演讲者窗口布局与目录、光点划线、灯箱和 data-sync 同步
 src/renderer/        稿库界面
 skills/deck-html/    配套 skill（写稿规范、模板、体检脚本）
-mobile/              手机 App 壳（Capacitor，Android 脚手架）
+mobile/              手机 App（Capacitor 连接页、独立遥控 WebView、前台音量键）
 examples/            示例稿：demo（随应用附带、首次启动放进稿库）、hello-deck
 src/demo.js          示例稿的安装 / 删除 / 升级
 src/preview.js       稿库预览：屏幕外渲染目录和缩略图，带缓存

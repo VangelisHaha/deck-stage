@@ -69,16 +69,21 @@ class RemoteServer {
     return new Promise((resolve, reject) => {
       const srv = http.createServer((req, res) => this.handle(req, res));
       const listen = (port) => {
-        srv.once('error', (e) => {
+        const onError = (e) => {
+          srv.removeListener('listening', onListening);
           if (e.code === 'EADDRINUSE' && port !== 0) return listen(0);
           reject(e);
-        });
-        srv.listen(port, '0.0.0.0', () => {
+        };
+        const onListening = () => {
+          srv.removeListener('error', onError);
           this.srv = srv;
           this.port = srv.address().port;
           this.keepAlive = setInterval(() => this.write(': ping\n\n'), 15000);
           resolve();
-        });
+        };
+        srv.once('error', onError);
+        srv.once('listening', onListening);
+        srv.listen(port, '0.0.0.0');
       };
       listen(PREFERRED_PORT);
     });

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 由 prepare-web.cjs 从遥控网页样式生成，请勿手工修改。 -->
+<resources>
+    <color name="deckstage_ink">#0F0F0E</color>
+    <color name="deckstage_paper">#F1EEE6</color>
+    <color name="deckstage_rule">#2E2D2A</color>
+    <color name="deckstage_dim">#9A958A</color>
+    <color name="deckstage_signal">#FF4F1F</color>
+    <color name="deckstage_body">#C9C4B8</color>
+    <color name="zxing_viewfinder_laser">#FF4F1F</color>
+</resources>

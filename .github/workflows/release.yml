@@ -120,20 +120,30 @@ jobs:
           version=${RELEASE_TAG#v}
           root_version=$(node -p "require('./package.json').version")
           test "$version" = "$root_version" || { echo "标签与 package.json 版本不一致"; exit 1; }
+      - name: 遥控逻辑回归检查
+        run: npm ci && npm test
       - name: 安装并同步 Capacitor
         working-directory: mobile
-        run: npm ci && npx cap sync android
+        run: npm ci && npm run sync -- android
       - name: 构建可安装 APK（Debug 签名）
         working-directory: mobile/android
         run: ./gradlew assembleDebug
+      - name: 构建独立远程验证包
+        working-directory: mobile/android
+        run: |
+          mkdir -p ../../dist
+          cp app/build/outputs/apk/debug/app-debug.apk "../../dist/DeckStage-${RELEASE_TAG#v}-android.apk"
+          ./gradlew assembleDebug -PremoteSmoke
+          cp app/build/outputs/apk/debug/app-debug.apk "../../dist/DeckStage-${RELEASE_TAG#v}-android-smoke.apk"
       - name: 收集并校验 APK
         shell: bash
         run: |
           version=${RELEASE_TAG#v}
-          apk=mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          apk="dist/DeckStage-${version}-android.apk"
           test -s "$apk"
+          python3 mobile/scripts/check-apk.py "$apk"
           mkdir -p dist
-          cp "$apk" "dist/DeckStage-${version}-android.apk"
+          python3 mobile/scripts/check-apk.py "dist/DeckStage-${version}-android-smoke.apk"
       - uses: actions/upload-artifact@v4
         with:
           name: release-android
