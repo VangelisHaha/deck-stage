@@ -1,128 +1,118 @@
 # 内核契约
 
-`deck.css` + `deck.js` 是固定层。这份文档说清它俩提供什么、期望稿子提供什么、哪些地方踩过雷。
+放映内核随 DeckStage 分发，由它的内置服务挂在 `/_deckstage/` 下：`deck.css`（框架样式 + 动效样式）、`deck.js`（放映、演讲者视图、素材装载、灯箱、动效引擎、导出）。稿子里没有内核文件，**修内核是改 DeckStage，不是改稿子**。
 
-## 加载顺序（不能改）
+## 稿子的固定结构
 
 ```html
-<link rel="stylesheet" href="deck.css">   <!-- head，稿子的 <style> 要在它之后 -->
-...
-<script>if(new URLSearchParams(location.search).has('notes'))
-        document.documentElement.classList.add('pv');</script>   <!-- head 末尾 -->
-...
-<script src="deck.config.js"></script>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>稿子标题</title>
+<link rel="stylesheet" href="/_deckstage/deck.css">   <!-- 在稿子自己的样式之前，稿子才能覆盖它 -->
+<style>/* 稿子的风格 */</style>                         <!-- 或 <link rel="stylesheet" href="css/xxx.css"> -->
+</head>
+<body>
+
+<div id="bg">…可选的背景装饰…</div>
+
+<section class="slide cover" data-t="封面">…</section>
+<section class="slide" data-t="第二页">…</section>
+
+<div id="spot"></div>                                 <!-- 可选：其他装饰层 -->
+
+<script src="deck.config.js"></script>                 <!-- 可选 -->
 <script src="notes.js"></script>
-<script src="lib/html2canvas.min.js"></script>
-<script src="lib/pptxgen.bundle.js"></script>
-<script src="deck.js"></script>
-<script>/* 稿子专属逻辑 */</script>
+<script src="/_deckstage/deck.js"></script>
+<script>/* 稿子专属脚本：图表、特效 */</script>
+</body>
+</html>
 ```
 
-两个关键点：
+内核启动时（`deck.js` 执行的那一刻）：
 
-- `pv` 类必须在 `<head>` 里就打到 `<html>` 上，否则演讲者视图会闪现一帧观众视图。
-- 稿子专属脚本必须在 `deck.js` **之后**。演讲者视图的缩略图是在 `setTimeout(...,0)` 里首建的，稿子里的 SVG 图表如果晚于那一刻才画，第一次建出来的克隆会是空图表；`deck.js` 已经在 `__assetsReady` 之后重建过一轮克隆，所以图片没问题，但**同步绘制的图表要在这一轮之前完成**。
+- body 里所有 `<section class="slide">` 收进舞台的 `#slides`，按文档顺序就是页序；
+- `#bg` 放到舞台最底层，没写就建一个空的；
+- body 里其余元素（装饰层、柔光）放进舞台、在幻灯之上，跟着一起缩放；
+- 生成提示 `#toast`、圆点 `#dots`、灯箱 `#lb`、演讲者视图 `#pv`，以及每页的页脚 `.footer`。
 
-## 稿子必须提供的 DOM
+所以稿子**不要**手写 `#stage`、`#slides`、`#prog`、`#dots`、`#lb`、`#pv`、`.footer`，也不要写演讲者视图开关脚本。
 
-id 是内核的接口，不要改名：
-
-```
-#tools  #btnPV #btnPptx #btnFull        工具条
-#toast                                  底部提示
-#pv     .pvtop #pvNo #pvTot #pvTitle    演讲者视图顶栏
-        #pvElapsed #pvPage #pvLink
-        #pvPrev #pvNext #pvFold
-        #pvWarn #pvBody #pvShots
-#stage  #bg #prog #slides               舞台
-#dots                                   圆点导航（内容由 JS 填）
-#lb     #lbImg #lbPct #lbCap .bar       灯箱
-```
-
-`.footer`（页码 + 台阶条）由 `deck.js` 注入每一页，**不要手写**。封面页（`.slide.cover`）不注入。
+加载顺序：`deck.config.js`、`notes.js`（及 `notes/*.js`）在内核之前；稿子专属脚本在内核之后（这样能直接用下面的钩子）。体检会检查。
 
 ## 对外钩子
-
-稿子里可以用：
 
 | 钩子 | 用途 |
 |---|---|
 | `window.__go(n)` | 跳到第 n 页（0 起） |
 | `window.__cur()` | 当前页序号 |
 | `window.__slides` | 所有 `.slide` 节点数组 |
-| `window.__toast(msg, ms)` | 底部提示，`ms=0` 表示不自动消失 |
-| `window.__assetsReady` | 素材装载完成的 Promise，导出前会 await 它 |
-| `window.__lbOpen` | 灯箱是否开着（开着时点屏幕不翻页；翻页键会先收起灯箱再翻页） |
+| `window.__toast(msg, ms)` | 底部提示，`ms=0` 不自动消失（观众窗口里不显示） |
+| `window.__assetsReady` | 素材装载完成的 Promise |
+| `window.__lbOpen` | 灯箱是否开着 |
+| `deck:slide` 事件 | 每次进入一页（含按 `R` 重播）在 `document` 上触发，`e.detail = { index, slide, replay }`。打开稿子时的第一页在 DOMContentLoaded 时触发，所以稿子脚本在内核之后注册也收得到 |
 
-## 配置字段
+专属动效用 `deck:slide` 驱动「进页重播」，不用自己去监听 class 变化：
 
-`deck.config.js` 里的 `window.__DECK`：
+```js
+document.addEventListener('deck:slide', function(e){
+  var s = e.detail.slide;     // 刚进入的这一页
+  // 重置并启动这一页的动效；记得先清掉上一页留下的定时器
+});
+```
 
-| 字段 | 必填 | 说明 |
+## 配置字段（deck.config.js，可选）
+
+只写和默认值不同的字段：
+
+```js
+window.__DECK = {
+  rail: { steps: [['01','事故现场'], ['02','结论落地']], map: { '第一幕': 1, '第二幕': 2 } },
+  gradientText: [ { sel: 'h2.t em', color: '#FFC94D' } ]
+};
+```
+
+| 字段 | 默认 | 说明 |
 |---|---|---|
-| `W` / `H` | 否 | 画布尺寸，默认 1600×900。deck.js 会写进 `--deck-w` / `--deck-h` |
-| `channel` | **是** | BroadcastChannel + localStorage 的 key。同时开两份稿子必须不同，否则互相翻页 |
-| `title` | 否 | 演讲者视图窗口标题后缀 |
-| `pptx` | 否 | `fileName` / `layoutName` / `author` / `title` / `subject` / `bgColor` / `scale` |
-| `rail` | 否 | `{ steps: [[短名, 全名], ...], map: { 幕间页 data-t: 第几级 } }`。不配则页脚只有页码 |
-| `bokeh` | 否 | `[[左%, 上%, 直径px, 颜色, 一圈秒数], ...]`。不配则无光斑 |
-| `gradientText` | 见下 | `[{ sel, color }]`，导出时的纯色兜底 |
+| `W` / `H` | 1600 / 900 | 画布尺寸，写进 CSS 变量 `--deck-w` / `--deck-h` |
+| `title` | `<title>` | 演讲者窗口标题、导出文件名 |
+| `pptx` | 见右 | `fileName`（默认 `标题.pptx`）、`author`、`title`、`subject`、`bgColor`（默认取 `--bg0`）、`scale`（默认 1.25 ≈ 200 DPI） |
+| `rail` | 无 | `{ steps: [[短名, 全名], ...], map: { 幕间页 data-t: 第几级 } }`。不配则页脚只有页码 |
+| `bokeh` | 无 | `[[左%, 上%, 直径px, 颜色, 一圈秒数], ...]` 背景光斑 |
+| `gradientText` | 无 | `[{ sel, color }]`，导出时的纯色兜底，见下 |
 
 ### rail 是怎么算的
 
-内核遍历所有页，遇到 `data-t` 命中 `rail.map` 的页就把当前级别切过去，之后每页沿用。所以：
+内核遍历所有页，遇到 `data-t` 命中 `rail.map` 的页就把当前级别切过去，之后每页沿用。所以增删内容页不会错位；改幕间页名字要同步改 `map`，体检会挡。
 
-- 幕间页的 `data-t` 要出现在 `map` 里
-- 增删内容页不会错位，因为级别是从幕间页往后顺延的
-- 改幕间页名字要同步改 `map`，体检会挡
+### gradientText 为什么必须登记
 
-### gradientText 为什么是必填
-
-html2canvas 渲染不了 `background-clip: text`。用它做的渐变文字，导出的 PPTX 里**直接是空白**——不报错，就是没字。所以凡是这么写的选择器：
-
-```css
-h2.t em{
-  background:linear-gradient(...);
-  -webkit-background-clip:text;background-clip:text;
-  -webkit-text-fill-color:transparent;
-}
-```
-
-都要在 `gradientText` 里配一个纯色兜底：
+html2canvas 渲染不了 `background-clip: text`。用它做的渐变文字，导出的 PPTX 里**直接是空白**——不报错，就是没字。凡是这么写的选择器都要配纯色兜底：
 
 ```js
 gradientText: [ { sel: 'h2.t em', color: '#FFC94D' } ]
 ```
 
-`deck.js` 启动时会把这些规则注成 `.exporting <sel>{...}`。`check_deck.py` 会扫 CSS 里所有 `background-clip:text` 的选择器，漏登记的报 error。
+内核启动时把这些规则注成 `.exporting <sel>{...}`。体检会扫所有 CSS（内联和 `<link>` 的本地文件）里 `background-clip:text` 的选择器，漏登记的报 error。
 
-这条是这份框架最容易翻车的地方——原来靠人手在 CSS 里维护 `.exporting` 块，加了新渐变元素就忘。改成配置 + 校验就管住了。
+## 导出模式 body.exporting
 
-## 演讲者视图的克隆机制
+导出 PPTX 和稿库预览都会给 `body` 加 `exporting`：内核关掉所有动画、动效直接显示终态，然后逐页截图。稿子自己的动效也要遵守「`body.exporting` 下显示终态」（见 `effects.md`）。
 
-预览条里当前页那一格放的是**观众舞台本体**（`#stage` 被 `insertBefore` 进去），所以永远和投影一致。其余格子是克隆节点，滚到附近才由 IntersectionObserver 填进去。
+## 演讲者窗口的上下页预览
 
-克隆时做了三件事：
-
-1. 去掉 `data-t` —— 克隆体不参与任何脚本查询
-2. 剥掉所有 `id` —— 避免 DOM 里出现重复 id
-3. 关掉 `.an` 动画 —— 缩略图不重播入场
-
-**后果：幻灯内部依赖 `id` 的逻辑（比如 `document.getElementById('trendChart')` 画的 SVG）在克隆里会失效。** 已画好的 SVG 内容会被 `cloneNode(true)` 带过去，所以静态图表没问题；但如果是「等某个事件再往 id 里塞内容」的写法，缩略图里就是空的。体检会对幻灯里的 `id=` 出 warn 提醒。
+演讲者窗口旁边的「上一页 / 下一页」是**克隆节点**：去掉 `data-t`、剥掉所有 `id`、关掉 `.an` 动画。后果：幻灯内部依赖 `id` 的效果（`document.getElementById('trendChart')` 画的 SVG 已经画好的会被带过去，没问题；「等某个事件再往 id 里塞内容」的写法在预览里就是空的）。体检会对幻灯里的 `id=` 出 warn 提醒；SVG 渐变 `id` 多页共用时，隐藏页里的定义会让别页的引用画不出来，给每个实例独立编号。
 
 ## 已踩过的雷
 
 | 现象 | 原因 | 对策 |
 |---|---|---|
 | 导出 PPTX 某行字空白 | 渐变文字没降级 | 登记 `gradientText`，体检会挡 |
-| 导出报跨域 / canvas 污染 | 从 `file://` 打开 | 走 `http://127.0.0.1:8899` |
-| 演讲者视图一直「未连主屏」 | 两个窗口不同源 | 从观众视图按钮打开，别手敲地址 |
-| 两份稿子互相翻页 | `channel` 撞了 | 每份稿子改成唯一名字 |
-| 缩略图里图表是空的 | 稿子脚本晚于首次建克隆 | 同步绘制，或在 `__assetsReady` 后重画 |
-| 缩略图里图位是空框 | 图片还没装载完 | 已由内核在 `__assetsReady` 后重建克隆解决 |
-| 换了同名图片但页面没变 | 浏览器缓存 | 内核给 src 带了时间戳，硬刷新即可 |
-| 导出到三十几页内存飙高 | canvas 没释放 | 内核已在每页后 `canvas.width = canvas.height = 0` |
-| 切到后台再回来同步断了 | 浏览器降频心跳 | 回前台几秒自动恢复，翻一页立刻重连 |
+| 预览里图表是空的 | 稿子脚本等事件才画 | 同步绘制，或在 `__assetsReady` 后重画 |
+| 演讲者窗口点了按钮，观众屏没反应 | 两个窗口是两份页面，页内状态不同步 | 外层容器加 `data-sync`（`deckstage.md`） |
+| 自动轮播在两个屏幕上不同步 | 两个窗口各跑各的定时器 | 区块加 `data-sync`，并在观众窗口让位：`if(document.documentElement.hasAttribute('data-mirror')) return;` |
+| 换了同名图片但页面没变 | 缓存 | 内核给 src 带了时间戳，⌘R 重载即可 |
 
 ## 键盘
 
@@ -131,7 +121,7 @@ gradientText: [ { sel: 'h2.t em', color: '#FFC94D' } ]
 | `→` `↓` `PageDown` `空格` `Enter` | 下一页 |
 | `←` `↑` `PageUp` | 上一页 |
 | `Home` / `End` | 首页 / 末页 |
-| `F` | 全屏 |
-| 灯箱开着时：`Esc` 关闭、`+` `-` 缩放、`0` 复位 | 这些键在 capture 阶段被拦，不会翻页。**翻页键（方向键、PageUp/PageDown、空格、回车、Home/End）会先收起灯箱再翻页**，不会出现「点了图之后键盘没反应」 |
+| `R` | 重播当前页动效 |
+| 灯箱开着时：`Esc` 关闭、`+` `-` 缩放、`0` 复位 | 翻页键会先收起灯箱再翻页 |
 
-点屏幕左 22% / 右 22% 也能翻页；点工具条、圆点、图片、灯箱不会误翻。
+点屏幕左 22% / 右 22% 也能翻页；点圆点、图片、灯箱不会误翻。DeckStage 自己的快捷键（`F` 全屏、`D` 换屏、`B` 黑屏、`G` 目录……）见它的 README 或演讲者窗口里的「帮助」。

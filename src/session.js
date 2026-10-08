@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { BrowserWindow, Notification, powerSaveBlocker, screen, session } = require('electron');
 const { startServer } = require('./server');
-const { JPEG_PATCH_JS } = require('./export');
+const { JPEG_PATCH_JS, START_EXPORT_JS } = require('./export');
 const { Services } = require('./services');
 const { fitWindow16x9, stablePort, readDeckTitle } = require('./util');
 
@@ -346,10 +346,8 @@ class Presentation {
     if (!this.audience) return;
     const wc = this.audience.webContents;
     wc.executeJavaScript(JPEG_PATCH_JS)
-      .then(() => wc.executeJavaScript(
-        "(function(){var b=document.getElementById('btnPptx');if(b){b.click();return true;}return false;})()"
-      ))
-      .then((ok) => { if (!ok) this.notify('这份稿子没有导出按钮'); });
+      .then(() => wc.executeJavaScript(START_EXPORT_JS))
+      .then((ok) => { if (!ok) this.notify('稿子没有加载出内核，没法导出'); });
   }
 
   notify(body) {

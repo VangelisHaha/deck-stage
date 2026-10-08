@@ -1,7 +1,7 @@
 {
   "name": "deck-stage",
   "productName": "DeckStage",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "HTML 演示稿放映壳：无浏览器痕迹、双屏、演讲者视图、投屏友好",
   "main": "src/main.js",
   "private": true,
@@ -37,6 +37,7 @@
     },
     "files": [
       "src/**/*",
+      "kernel/**/*",
       "package.json"
     ],
     "extraResources": [
@@ -65,11 +66,17 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         },
         {
           "target": "zip",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ]
     },
@@ -78,7 +85,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },

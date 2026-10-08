@@ -1,11 +1,15 @@
 'use strict';
 // 注入到观众/演讲者窗口的预加载脚本（沙箱内只能用 electron 的 ipcRenderer）。
-// 去浏览器痕迹：隐藏稿子工具条、鼠标自动隐藏、黑屏、窗口模式下的拖动条。
-// 演讲者窗口另加：大画面布局、目录、光点与划线（划线经主进程转给观众窗口）。不改稿子文件，旧稿子同样生效。
+// 放映内核（kernel/deck.js）负责翻页、台词、灯箱这些稿子本身的能力；这里只做和 App 相关的部分：
+// 鼠标自动隐藏、黑屏、窗口模式下的拖动条；演讲者窗口的大画面布局、目录、光点与划线（经主进程转给观众窗口）；
+// 灯箱和 data-sync 区块从演讲者窗口同步到观众窗口。
 const { ipcRenderer } = require('electron');
 
+// 演讲者视图的样式开关尽早打上，避免先闪一帧观众视图（内核加载后也会再打一次）
+if (/[?&]notes\b/.test(location.search) && document.documentElement) document.documentElement.classList.add('pv');
+
 const CSS = `
-body.stage-audience #tools, body.stage-audience #toast { display: none !important; }
+body.stage-audience #toast { display: none !important; }
 html.stage-idle, html.stage-idle * { cursor: none !important; }
 #stage-drag { position: fixed; top: 0; left: 30%; right: 30%; height: 18px; z-index: 2147483000; -webkit-app-region: drag; }
 html.stage-fs #stage-drag { display: none; }
@@ -13,8 +17,6 @@ html.stage-fs #stage-drag { display: none; }
 #stage-black.on { display: block; }
 .stage-end { margin-left: 12px; height: 32px; padding: 0 14px; border: 1px solid #F1EEE6; background: transparent; color: #F1EEE6; font: 12px "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: 1px; cursor: pointer; white-space: nowrap; }
 .stage-end.confirm { background: #FF4F1F; border-color: #FF4F1F; color: #121212; }
-/* 稿子的框架样式在演讲者视图里把灯箱整个藏了，结果点图「打开」了一个看不见的灯箱。这里让它在演讲者窗口里也显示出来 */
-html.pv #lb.on { display: flex !important; }
 #stage-ink { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 2147482000; pointer-events: none; }
 .stage-end.float { position: fixed; top: 10px; right: 10px; z-index: 2147483000; }
 `;
@@ -215,7 +217,7 @@ const FONT_MIN = 12;
 const FONT_MAX = 40;
 
 const PV_CSS = `
-#pv .pvshots, #pv #pvFold { display: none !important; }
+#pv .pvmain { display: none !important; }
 #ps-main { flex: 1; min-height: 0; display: flex; }
 #ps-left { flex: 0 0 calc(var(--ps-split, 62) * 1%); min-width: 0; display: flex; flex-direction: column; }
 #ps-area { flex: 1; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; padding: 12px 6px 8px 14px; }
@@ -292,8 +294,8 @@ function initPresenter(styleEl) {
   styleEl.textContent += PV_CSS;
   const pv = document.getElementById('pv');
   const body = document.getElementById('pvBody');
-  const shots = document.getElementById('pvShots');
-  if (!pv || !body || !shots) return; // 不是 deck-html 骨架就保持原样
+  const pvMain = pv && pv.querySelector('.pvmain');
+  if (!pv || !body || !pvMain) return; // 页面没加载出内核就保持原样
 
   const cssNum = (name, dflt) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || dflt;
   const prefs = Object.assign({ layout: 'bal' }, ipcRenderer.sendSync('stage:prefs-get') || {});
@@ -335,13 +337,11 @@ function initPresenter(styleEl) {
   left.append(area, bar, hint);
   right.append(body, next);
   main.append(left, splitter, right);
-  pv.insertBefore(main, shots);
+  pv.insertBefore(main, pvMain);
 
-  // 观众舞台本体由稿子的脚本放进预览条里，这里每次都把它拿回来放大使用
+  // 内核把当前页舞台放在自己的基础布局里，这里拿过来放大使用
   const stageEl = document.getElementById('stage');
-  const claim = () => { if (stageEl && stageEl.parentElement !== box) box.insertBefore(stageEl, inkCanvas); };
-  new MutationObserver(claim).observe(shots, { childList: true, subtree: true });
-  claim();
+  if (stageEl) box.insertBefore(stageEl, inkCanvas);
 
   // ---- 尺寸 ----
   const fit = () => {
@@ -696,19 +696,6 @@ function initPresenter(styleEl) {
   onTick();
 }
 
-// 稿子里点图会弹出灯箱，灯箱开着时稿子自己会吞掉翻页键，看起来像「键盘突然失灵」。
-// 这里在最前面截住翻页键：先收起灯箱，再让这次按键正常翻页（Esc、+ - 0 仍由灯箱自己处理）。
-const PAGE_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' ', 'Enter']);
-function closeLightboxOnPageKey() {
-  window.addEventListener('keydown', (e) => {
-    if (e.metaKey || e.ctrlKey || e.altKey || !PAGE_KEYS.has(e.key)) return;
-    const lb = document.getElementById('lb');
-    if (!lb || !lb.classList.contains('on')) return;
-    const close = lb.querySelector('[data-lb="close"]');
-    if (close) close.click();
-  }, true);
-}
-
 // 灯箱（点图放大）开着时告诉主进程：Esc 要先用来关灯箱，而不是退出全屏 / 结束放映
 // 演讲者窗口里点图放大 = 观众屏幕上也放大：打开、缩放、平移、关闭都同步过去（平移量按各自窗口大小折算成比例）
 function watchLightbox() {
@@ -767,10 +754,11 @@ function watchLightbox() {
 
 // 页内交互状态同步：稿子里带 data-sync 的区块，演讲者窗口里发生的变化（按钮状态、文字、显隐）原样同步到观众窗口。
 // 只同步结果，不重放点击，所以「发送」这类有副作用的按钮不会在观众窗口再执行一遍。区块本身的属性不管（留给翻页动效）。
-const SYNC_ATTRS = new Set(['class', 'hidden', 'disabled', 'style', 'aria-pressed', 'aria-expanded', 'aria-checked', 'value', 'open']);
+const SYNC_ATTR_NAMES = new Set(['class', 'hidden', 'disabled', 'style', 'aria-pressed', 'aria-expanded', 'aria-checked', 'value', 'open', 'src']);
+const syncAttr = (name) => SYNC_ATTR_NAMES.has(name) || name.startsWith('data-') || name.startsWith('aria-');
 function watchSyncZones() {
   const isPresenter = /[?&]notes\b/.test(location.search);
-  const zones = () => Array.from(document.querySelectorAll('[data-sync]'));
+  const zones = () => Array.from(document.querySelectorAll('#slides [data-sync]')); // 只认真正的幻灯区，演讲者窗口里的缩略图克隆不算
   const pathOf = (zone, node) => {
     const path = [];
     for (let n = node; n && n !== zone; n = n.parentNode) {
@@ -785,7 +773,7 @@ function watchSyncZones() {
     const send = (m) => ipcRenderer.send('stage:dom-sync', m);
     const snapshot = (z, zi) => z.querySelectorAll('*').forEach((el) => {
       const attrs = {};
-      for (const a of el.attributes) if (SYNC_ATTRS.has(a.name)) attrs[a.name] = a.value;
+      for (const a of el.attributes) if (syncAttr(a.name)) attrs[a.name] = a.value;
       send({ zi, path: pathOf(z, el), op: 'attrs', attrs });
     });
     new MutationObserver((records) => {
@@ -796,7 +784,7 @@ function watchSyncZones() {
         if (zi < 0) continue;
         const z = list[zi];
         if (r.type === 'attributes') {
-          if (r.target === z || !SYNC_ATTRS.has(r.attributeName)) continue;
+          if (r.target === z || !syncAttr(r.attributeName)) continue;
           const v = r.target.getAttribute(r.attributeName);
           send({ zi, path: pathOf(z, r.target), op: 'attr', name: r.attributeName, value: v });
         } else if (r.type === 'characterData') {
@@ -810,12 +798,13 @@ function watchSyncZones() {
     ipcRenderer.on('stage:dom-sync-hello', () => zones().forEach(snapshot));
   } else {
     ipcRenderer.on('stage:dom-sync', (_e, m) => {
+      document.documentElement.setAttribute('data-mirror', ''); // 稿子里自己的定时切换在观众窗口让位，以演讲者窗口为准
       const z = zones()[m.zi];
       if (!z || !Array.isArray(m.path)) return;
       const n = nodeAt(z, m.path);
       if (!n) return;
       if (m.op === 'attr') { if (m.value === null) n.removeAttribute(m.name); else n.setAttribute(m.name, m.value); } else if (m.op === 'attrs') {
-        for (const a of Array.from(n.attributes)) if (SYNC_ATTRS.has(a.name) && !(a.name in m.attrs)) n.removeAttribute(a.name);
+        for (const a of Array.from(n.attributes)) if (syncAttr(a.name) && !(a.name in m.attrs)) n.removeAttribute(a.name);
         for (const [k, v] of Object.entries(m.attrs)) n.setAttribute(k, v);
       } else if (m.op === 'text') n.data = m.value;
       else if (m.op === 'html') n.innerHTML = m.value;
@@ -827,7 +816,6 @@ function watchSyncZones() {
 window.addEventListener('DOMContentLoaded', () => {
   const root = document.documentElement;
   const isPresenter = /[?&]notes\b/.test(location.search);
-  closeLightboxOnPageKey();
   watchLightbox();
   watchSyncZones();
 

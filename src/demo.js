@@ -6,7 +6,7 @@ const path = require('path');
 const { app } = require('electron');
 const store = require('./store');
 
-const DEMO_VERSION = 1; // 示例稿内容有改动时加一
+const DEMO_VERSION = 2; // 示例稿内容有改动时加一（2：改用 App 内置内核，稿子里不再带 deck.js / deck.css）
 const ROOT_NAME = 'DeckStage 示例';
 const DECK_NAME = '欢迎使用 DeckStage';
 

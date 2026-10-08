@@ -1,15 +1,11 @@
 /* ============================================================
-   deck-html · 框架样式（固定层）
+   DeckStage 内核样式（随 App 分发，稿子通过 /_deckstage/deck.css 引用）
 
-   这个文件只管「放映器长什么样」：舞台缩放、翻页容器、页脚、
-   进度条、圆点、工具条、图位、灯箱、导出模式、演讲者视图。
-   它不含任何风格：配色、字号、卡片、栅格全部由每份稿子自己的
-   <style> 决定。
+   只管「放映器长什么样」：舞台缩放、翻页容器、页脚、进度条、圆点、
+   图位、灯箱、导出模式、演讲者视图、动效引擎。不含任何风格：
+   配色、字号、卡片、栅格全部由稿子自己的样式决定。
 
-   ⚠️ 改这个文件等于改所有稿子。要调风格请在 index.html 的
-   <style> 里覆盖，不要动这里。
-
-   框架依赖的变量（在稿子里覆盖即可换肤）：
+   稿子覆盖这些变量即可换肤：
      --font --mono                 字体
      --bg0                         底色
      --ink --ink2 --ink3 --ink4 --ink5   文字由亮到暗
@@ -51,7 +47,7 @@ body{font-family:var(--font);color:var(--ink2);-webkit-font-smoothing:antialiase
 
 /* ============================================================
    舞台：固定画布等比缩放适配窗口
-   画布尺寸由 deck.config.js 的 W/H 决定，deck.js 会写进这两个变量
+   画布尺寸由 deck.config.js 的 W/H 决定，内核写进这两个变量
    ============================================================ */
 #stage{
   position:fixed;left:50%;top:50%;
@@ -96,7 +92,7 @@ body{font-family:var(--font);color:var(--ink2);-webkit-font-smoothing:antialiase
 .d13{animation-delay:.89s}.d14{animation-delay:.96s}.d15{animation-delay:1.03s}
 .d16{animation-delay:1.10s}
 
-/* ---------- 页脚：台阶条 + 页码（由 deck.js 注入） ---------- */
+/* ---------- 页脚：台阶条 + 页码（内核注入） ---------- */
 .footer{position:absolute;left:56px;right:56px;bottom:22px;z-index:40;
   display:flex;align-items:center;justify-content:space-between;
   font-size:12.5px;color:var(--ink5);letter-spacing:.08em;}
@@ -126,14 +122,7 @@ body{font-family:var(--font);color:var(--ink2);-webkit-font-smoothing:antialiase
 .imgslot.has{border-style:none;}
 .imgslot img{width:100%;height:100%;object-fit:contain;display:block;}
 
-/* ---------- 工具条 / 提示 ---------- */
-#tools{position:fixed;right:20px;top:16px;z-index:200;display:flex;gap:9px;}
-#tools button{display:flex;align-items:center;gap:7px;font-family:var(--font);
-  font-size:12.5px;font-weight:700;color:var(--ink3);cursor:pointer;
-  padding:8px 14px;border-radius:10px;border:1px solid var(--line2);
-  background:rgba(0,0,0,.6);transition:all .22s;}
-#tools button:hover{color:var(--ink);border-color:var(--accent);background:var(--accent-dim);}
-#tools button:disabled{opacity:.5;cursor:progress;}
+/* ---------- 提示 ---------- */
 #toast{position:fixed;left:50%;bottom:34px;transform:translate(-50%,20px);z-index:300;
   padding:12px 22px;border-radius:12px;font-size:13.5px;font-weight:700;
   background:rgba(0,0,0,.9);border:1px solid var(--accent);color:var(--ink);
@@ -176,27 +165,42 @@ body{font-family:var(--font);color:var(--ink2);-webkit-font-smoothing:antialiase
   min-width:52px;text-align:center;}
 
 /* ============================================================
-   导出模式
+   导出模式（导出 PPTX、稿库预览都会打开）
    html2canvas 不支持 background-clip:text，渐变文字必须降级成纯色。
-   降级规则不写在这里 —— 每份稿子在 deck.config.js 的 gradientText
-   里登记，deck.js 启动时注入。check_deck.py 会校验有没有漏登记。
+   降级规则在 deck.config.js 的 gradientText 里登记，内核启动时注入。
    ============================================================ */
 .exporting *{animation:none !important;transition:none !important;}
-.exporting #tools,.exporting #dots,.exporting #toast,.exporting #lb{display:none !important;}
+.exporting #dots,.exporting #toast,.exporting #lb{display:none !important;}
 .exporting .bokeh{filter:blur(30px) !important;}
 
 /* ============================================================
-   演讲者视图 · index.html?notes=1
-   主屏放观众视图，小屏放这个，BroadcastChannel 双向同步
-   布局：顶栏（页码/标题/计时/翻页）→ 台词（可滚）→ 幻灯预览条
+   动效引擎（fx）
+     [data-seq] 容器里的 .q     按顺序逐条出现（内核给它加 .in）
+     [data-type]                逐字打出，完成后加 .done
+   隐藏态只作用于「当前真实页面」：
+     - 演讲者视图的上一页 / 下一页预览是克隆体，没有 data-t，直接显示终态
+     - 导出 PPTX 和稿库预览时 body.exporting，直接显示终态
    ============================================================ */
-.pv #dots,.pv #tools,.pv #lb{display:none !important;}
+body:not(.exporting) .slide[data-t].on .q:not(.in){opacity:0;transform:translateY(14px);}
+body:not(.exporting) .slide[data-t].on .q.left:not(.in){transform:translateX(-22px);}
+body:not(.exporting) .slide[data-t].on .q.zoom:not(.in){transform:scale(.94);}
+body:not(.exporting) .slide[data-t].on .q.fade:not(.in){transform:none;}
+.q{transition:opacity .5s cubic-bezier(.22,1,.36,1),transform .6s cubic-bezier(.22,1,.36,1);}
+
+body:not(.exporting) .slide[data-t].on [data-type] .ch:not(.in){opacity:0;}
+[data-type] .caret{display:inline-block;width:.55em;height:1.05em;vertical-align:-.15em;margin-left:2px;
+  background:var(--accent);animation:fx-blink 1s steps(1) infinite;}
+[data-type].done .caret{display:none;}
+@keyframes fx-blink{50%{opacity:0;}}
+
+/* ============================================================
+   演讲者视图（?notes=1）
+   内核自带一个基础布局：顶栏（页码 / 标题 / 计时 / 翻页）→ 当前页 + 台词。
+   在 DeckStage 里放映时，App 会换成更完整的布局（目录、光点、上下页预览）。
+   ============================================================ */
+.pv #dots{display:none !important;}
 .pv .bokeh{animation:none !important;}
-/* 观众舞台在演讲者视图里降级成缩略图，钉进 .shot.now，左上角为缩放原点。
-   ready 这个类名不能叫 mini，否则会被下面 .mini 的规则连带命中。 */
-.pv #stage{position:absolute;left:0;top:0;transform-origin:0 0;
-  transform:scale(.001);opacity:0;transition:opacity .2s;}
-.pv #stage.ready{opacity:1;}
+.pv #stage{position:absolute;left:0;top:0;transform-origin:0 0;}
 #pv{display:none;}
 .pv #pv{display:flex;flex-direction:column;position:fixed;inset:0;
   background:var(--bg0);z-index:50;}
@@ -208,15 +212,10 @@ body{font-family:var(--font);color:var(--ink2);-webkit-font-smoothing:antialiase
 #pv .pvttl{flex:1;min-width:0;font-size:20px;font-weight:700;color:var(--ink);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 #pv .pvclock{flex:none;display:flex;gap:12px;align-items:baseline;font-family:var(--mono);}
-#pv .pvtot{font-size:23px;font-weight:700;color:var(--ink2);}
+#pv .pvtot{font-size:23px;font-weight:700;color:var(--ink2);cursor:pointer;}
 #pv .pvpg{font-size:14px;color:var(--ink4);}
 #pv .pvpg.warn{color:var(--accent2);}
 #pv .pvpg.over{color:#FF6FB5;font-weight:700;}
-#pv .pvlink{flex:none;display:flex;align-items:center;font-family:var(--mono);font-size:11px;}
-#pv .pvlink i{width:8px;height:8px;border-radius:50%;background:#FF6FB5;
-  display:inline-block;margin-right:5px;}
-#pv .pvlink.ok i{background:var(--accent3);}
-#pv .pvlink em{color:var(--ink4);font-style:normal;}
 #pv .pvnav{flex:none;display:flex;gap:7px;}
 #pv .pvnav button{width:44px;height:36px;border-radius:10px;cursor:pointer;font-size:15px;
   font-family:var(--font);border:1px solid var(--line2);
@@ -227,11 +226,15 @@ body{font-family:var(--font);color:var(--ink2);-webkit-font-smoothing:antialiase
 #pv .pvnav button:disabled{opacity:.28;cursor:default;}
 #pv .pvnav #pvNext{width:62px;color:var(--ink);border-color:var(--accent);}
 
-/* 台词正文 —— 装不下就上下滑 */
-#pv .pvbody{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+#pv .pvmain{flex:1;min-height:0;display:flex;}
+#pv .pvstage{flex:0 0 60%;position:relative;overflow:hidden;margin:12px 0 12px 14px;
+  border:1px solid var(--line2);background:var(--bg0);}
+
+/* 台词正文：装不下就上下滑 */
+#pv .pvbody{flex:1;min-width:0;min-height:0;overflow-y:auto;overscroll-behavior:contain;
   padding:22px 28px 18px;
   font-size:clamp(18px,1.85vw,25px);line-height:1.88;color:var(--ink);
-  letter-spacing:.01em;-webkit-overflow-scrolling:touch;}
+  letter-spacing:.01em;}
 #pv .pvbody p{margin:0 0 1em;}
 #pv .pvbody b{color:var(--accent2);font-weight:700;}
 #pv .pvbody .cue{margin:0 0 1em;padding:7px 13px;border-left:3px solid var(--accent3);
@@ -242,49 +245,10 @@ body{font-family:var(--font);color:var(--ink2);-webkit-font-smoothing:antialiase
 #pv .pvbody::-webkit-scrollbar-thumb{background:var(--line2);border-radius:5px;}
 #pv .pvbody::-webkit-scrollbar-track{background:var(--line);}
 
-/* 连不上主屏时的自解释提示 */
-#pv .pvwarn{flex:none;display:none;padding:10px 18px;font-size:13px;line-height:1.62;
-  background:rgba(255,45,149,.13);border-bottom:1px solid rgba(255,45,149,.3);color:#FF9AC9;}
-#pv .pvwarn.on{display:block;}
-#pv .pvwarn b{color:var(--accent2);}
-#pv .pvwarn code{font-family:var(--mono);font-size:12.5px;color:var(--ink2);}
-
-/* 幻灯预览条：全页横向滚动，当前页那格用观众舞台本体，其余按需填克隆 */
-#pv .pvshots{flex:none;display:flex;gap:10px;align-items:center;
-  padding:11px 16px 9px;overflow-x:auto;overflow-y:hidden;
-  overscroll-behavior-x:contain;border-top:1px solid var(--line);
-  background:rgba(0,0,0,.35);}
-#pv.fold .pvshots{display:none;}
-#pv .pvshots::-webkit-scrollbar{height:9px;}
-#pv .pvshots::-webkit-scrollbar-thumb{background:var(--line2);border-radius:5px;}
-#pv .pvshots::-webkit-scrollbar-track{background:var(--line);border-radius:5px;}
-#pv .shot{position:relative;overflow:hidden;flex:none;border-radius:9px;cursor:pointer;
-  background:var(--bg0);border:1px solid var(--line2);opacity:.52;
-  transition:opacity .16s,border-color .16s;}
-#pv .shot:hover{opacity:.95;border-color:var(--accent);}
-#pv .shot.now{opacity:1;cursor:default;border-color:var(--accent2);
-  box-shadow:0 6px 22px rgba(0,0,0,.45);}
-#pv .shot .cap{position:absolute;left:0;right:0;bottom:0;z-index:70;padding:3px 7px;
-  font-family:var(--mono);font-size:10px;letter-spacing:.02em;color:var(--ink3);
-  background:linear-gradient(0deg,rgba(0,0,0,.95) 34%,transparent);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;}
-#pv .shot.now .cap{color:var(--accent2);font-size:10.5px;}
-#pv .shot.now .cap::before{content:'观众正在看 · ';opacity:.75;}
-/* 克隆节点撑在整张画布上再整体缩放 */
-#pv .shot > .mini{position:absolute;left:0;top:0;
-  width:var(--deck-w,1600px);height:var(--deck-h,900px);
-  transform-origin:0 0;pointer-events:none;}
-#pv .shot > .mini > .slide{display:flex !important;}
-#pv .shot > .mini .an{animation:none !important;}
-
-/* 窄屏（笔记本竖排 / 平板）：标题让位，预览缩小 */
 @media (max-width:760px){
+  #pv .pvmain{flex-direction:column;}
+  #pv .pvstage{flex:0 0 45%;margin:10px 12px 0;}
   #pv .pvttl{font-size:16px;}
   #pv .pvtot{font-size:19px;}
   #pv .pvbody{padding:16px 16px 12px;font-size:18px;line-height:1.82;}
-  #pv .pvclock{gap:8px;}
-  #pv .pvnav button{width:40px;height:34px;}
-  #pv .pvnav #pvNext{width:52px;}
-  #pv .pvlink em{display:none;}
-  #pv .pvshots{padding:9px 12px 11px;gap:8px;}
 }

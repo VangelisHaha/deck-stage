@@ -20,7 +20,7 @@ DIR="$(cd "$DIR" && pwd)"
 
 if [[ "$(uname)" != "Darwin" ]] || ! command -v open >/dev/null 2>&1; then
   echo "这台机器没法直接唤起 DeckStage。稿子在：$DIR"
-  echo "放映：cd \"$DIR\" && ./serve.sh，或在装了 DeckStage 的 Mac 上把这个目录登记进稿库。"
+  echo "放映：在装了 DeckStage 的电脑上把这个目录登记进稿库（远端机器可以用 DeckStage 的「添加远端目录」）。"
   exit 0
 fi
 
@@ -33,5 +33,5 @@ if open "$URL" 2>/dev/null; then
   echo "请切到 DeckStage：右侧浮窗可先看目录和缩略图，回车开始放映。"
 else
   echo "没能唤起 DeckStage（可能还没安装）。稿子在：$DIR"
-  echo "放映：cd \"$DIR\" && ./serve.sh"
+  echo "稿子需要用 DeckStage 放映：https://github.com/VangelisHaha/deck-stage/releases"
 fi

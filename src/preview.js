@@ -10,11 +10,11 @@ const { startServer } = require('./server');
 const { latestMtime } = require('./util');
 
 const THUMB_W = 1280; // 够放大看清；列表里的小图是同一张缩小显示
-const CACHE_V = 'v2'; // 渲染方式改了就加一，旧缓存自然失效
+const CACHE_V = 'v3'; // 渲染方式改了就加一，旧缓存自然失效
 const PAGE_W = 1600;
 const PAGE_H = 900;
 const HIDE_CSS = `
-#tools, #toast, #dots, #stage .footer { display: none !important; }
+#toast, #dots, #stage .footer { display: none !important; }
 .an, .an * { animation: none !important; transition: none !important; }
 `;
 

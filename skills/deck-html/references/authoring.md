@@ -18,9 +18,9 @@
 ```
 
 - `data-t` 是这一页的**唯一名字**，同时是 `notes.js` 的 key、圆点提示、预览条标题。改名要同步改 `notes.js`。
-- 页码、页脚台阶条由 `deck.js` 注入，别手写。
+- 页码、页脚台阶条由内核注入，别手写。
 - `.body` 撑满剩余高度；要整体垂直居中写 `class="body vc"`。
-- `.kicker` / `h2.t` / `.sub` / `.card` / `.punch` 这些**都是稿子自己的类**，模板给了一套示例，可以整套换掉。框架只认 `.slide` / `.body` / `.an` / `.dN` / `.footer` / `.imgslot` / `[data-avatar]`。
+- `.kicker` / `h2.t` / `.sub` / `.card` / `.punch` 这些**都是稿子自己的类**，模板给了一套示例，可以整套换掉。内核只认 `.slide` / `.cover` / `.body` / `.an` / `.dN` / `.footer` / `.imgslot` / `[data-avatar]` 和动效引擎的 `data-seq` / `.q` / `data-type` / `data-count`。
 
 ## 入场动画
 
@@ -73,7 +73,7 @@ rail: {
 <div class="ph" data-avatar="assets/crew-1.png">👤</div>
 ```
 
-两者都会被灯箱接管（点图放大）。src 带时间戳，换同名图硬刷新就能看到。
+两者都会被灯箱接管（点图放大，观众屏同步）。src 带时间戳，换同名图在 DeckStage 里 ⌘R 就能看到。
 
 约定：文件名用语义化的固定名（`demo-群里问.png` 不如 `demo-group-ask.png`），先在 HTML 里把图位占好，图后补。
 
@@ -124,7 +124,7 @@ rail: {
 
 ```bash
 python3 <SKILL_DIR>/scripts/check_deck.py <稿子目录>
-./serve.sh
+<SKILL_DIR>/scripts/open_in_deckstage.sh <稿子目录>
 ```
 
-体检过了再让用户自己开浏览器看。**不要自己截图逐页核对**——慢，而且容易把服务搞崩。告诉他改了哪几页、要重点看什么（比如「这一页六格并排，注意最长那个名字会不会折行」）。
+体检过了再让用户自己在 DeckStage 里看。**不要自己截图逐页核对**——慢，而且容易把服务搞崩。告诉他改了哪几页、要重点看什么（比如「这一页六格并排，注意最长那个名字会不会折行」）。

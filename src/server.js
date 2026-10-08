@@ -3,6 +3,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { kernelFile, readPage } = require('./kernel');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -43,14 +44,22 @@ function serveFile(req, res, file) {
   });
 }
 
+// 稿子目录 + 内核（/_deckstage/）。HTML 页面先展开 <!-- @include --> 再返回
 function makeHandler(root) {
   const base = path.resolve(root);
   return (req, res) => {
     let pathname;
     try { pathname = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch (e) { return send(res, 400, 'Bad request'); }
+    const kf = kernelFile(pathname);
+    if (kf) return serveFile(req, res, kf);
     let file = path.resolve(path.join(base, pathname));
     if (file !== base && !file.startsWith(base + path.sep)) return send(res, 403, 'Forbidden');
     try { if (fs.statSync(file).isDirectory()) file = path.join(file, 'index.html'); } catch (e) { /* 交给 serveFile 回 404 */ }
+    if (path.extname(file).toLowerCase() === '.html') {
+      let html;
+      try { html = readPage(file, base); } catch (e) { return send(res, 404, 'Not found'); }
+      return send(res, 200, req.method === 'HEAD' ? '' : html, { 'Content-Type': MIME['.html'] });
+    }
     serveFile(req, res, file);
   };
 }

@@ -4,6 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFile } = require('child_process');
+const { includesOf } = require('./kernel');
 
 function expandHome(p) {
   if (!p) return p;
@@ -14,7 +15,7 @@ function isDir(p) {
   try { return fs.statSync(p).isDirectory(); } catch (e) { return false; }
 }
 
-// 稿子目录的判据：有 index.html，且有 deck.config.js 或 notes.js（deck-html 骨架的固定文件；早期稿子只有 notes.js）
+// 稿子目录的判据：有 index.html，且有 notes.js 或 deck.config.js
 function isDeckDir(dir) {
   const has = (f) => fs.existsSync(path.join(dir, f));
   return has('index.html') && (has('deck.config.js') || has('notes.js'));
@@ -44,12 +45,12 @@ function deckLabel(dir) {
   return /^(slides|deck|dist)$/i.test(base) ? path.basename(path.dirname(dir)) : base;
 }
 
-// 稿子由 acts/、notes/ 拆分，只看 index.html 的修改时间会漏，这里取关键位置里最新的
+// 稿子由 include 片段、notes/ 等拆分，只看 index.html 的修改时间会漏，这里取关键位置里最新的
 function latestMtime(root) {
   let t = 0;
-  for (const name of ['index.html', 'deck.config.js', 'notes.js', 'acts', 'notes', 'css']) {
+  const names = ['index.html', 'deck.config.js', 'notes.js', 'acts', 'notes', 'css', 'js'];
+  for (const p of [...names.map((n) => path.join(root, n)), ...includesOf(path.join(root, 'index.html'), root)]) {
     try {
-      const p = path.join(root, name);
       const st = fs.statSync(p);
       t = Math.max(t, st.mtimeMs);
       if (st.isDirectory()) {

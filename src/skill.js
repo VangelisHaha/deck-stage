@@ -24,7 +24,7 @@ ${dir}
 - Claude Code：~/.claude/skills/
 - Codex：~/.codex/skills/
 - 其他 Agent：用它自己的 skills 目录
-已存在同名目录时，先对比差异再覆盖，不要直接删除。
+已存在同名目录时，先对比差异再覆盖，不要直接删除。旧版 skill 的模板里带 deck.js / deck.css / lib/，新版不再需要（放映内核由 DeckStage 提供），以这一版为准。
 
 2. 确认可用
 读一遍 ${SKILL_NAME}/SKILL.md，再运行：

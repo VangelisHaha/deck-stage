@@ -4,23 +4,10 @@
 <meta charset="utf-8">
 <title>DeckStage 是什么</title>
 
-<!-- 框架样式：固定层，不要改。风格在下面自己的 <style> 里覆盖 -->
-<link rel="stylesheet" href="deck.css">
+<link rel="stylesheet" href="/_deckstage/deck.css">
 
 <style>
-/* ============================================================
-   这份稿子的风格层 —— 想怎么改都行
-
-   1) 换肤：覆盖 deck.css 声明的那几个变量就够了
-   2) 排版与组件：kicker / 标题 / 卡片 / 栅格 / 表格… 全部自己写
-
-   框架只认这几个结构类，别的都归你：
-     .slide  .slide.on  .slide.cover  .body  .body.vc
-     .an .pop .sl  .d1~.d16      入场动画
-     .footer .steps .st .pno     页脚（由 deck.js 注入，改样式即可）
-     .imgslot[data-src]          自动装载的图位
-     [data-avatar]               自动装载的小头像
-   ============================================================ */
+/* 这份稿子的风格：覆盖内核的变量换肤，排版和组件全部自己写 */
 
 :root{
   /* --- 换肤：改这几个就够 --- */
@@ -91,48 +78,10 @@ h2.t em{font-style:normal;color:var(--accent2);}
 .act .atxt p{margin-top:14px;font-size:18px;color:var(--ink3);max-width:820px;}
 </style>
 
-<script>
-/* 演讲者视图开关：尽早打到 <html> 上，避免闪现一帧观众视图 */
-if(new URLSearchParams(location.search).has('notes'))
-  document.documentElement.classList.add('pv');
-</script>
-<link rel="stylesheet" href="fx.css">
 </head>
 <body>
 
-<!-- ══════════════ 工具条 · 框架结构，别改 id ══════════════ -->
-<div id="tools">
-  <button id="btnPV">⧉ 演讲者视图</button>
-  <button id="btnPptx">⬇ 导出 PPTX</button>
-  <button id="btnFull">⛶ 全屏</button>
-</div>
-<div id="toast"></div>
-
-<!-- ══════════════ 演讲者视图 · ?notes=1 · 框架结构，别改 ══════════════ -->
-<div id="pv">
-  <div class="pvtop">
-    <div class="pvno"><b id="pvNo">01</b> / <span id="pvTot">00</span></div>
-    <div class="pvttl" id="pvTitle">—</div>
-    <div class="pvclock">
-      <span class="pvtot" id="pvElapsed">00:00</span>
-      <span class="pvpg" id="pvPage">0:00 / 0:00</span>
-    </div>
-    <div class="pvlink" id="pvLink"><i></i><em>未连主屏</em></div>
-    <div class="pvnav">
-      <button id="pvPrev" title="上一页（← 也行）">◀</button>
-      <button id="pvNext" title="下一页（→ 也行）">▶</button>
-      <button id="pvFold" title="收起 / 展开幻灯预览">▤</button>
-    </div>
-  </div>
-  <div class="pvwarn" id="pvWarn"></div>
-  <div class="pvbody" id="pvBody"></div>
-  <div class="pvshots" id="pvShots"></div>
-</div>
-
-<div id="stage">
-  <div id="bg"></div>
-  <div id="prog"></div>
-  <div id="slides">
+<div id="bg"></div>
 
 <section class="slide cover" data-t="封面">
   <div>
@@ -210,40 +159,8 @@ if(new URLSearchParams(location.search).has('notes'))
   </div>
 </section>
 
-  </div>
-</div>
-<div id="dots"></div>
-
-<!-- ══════════════ 图片灯箱 · 框架结构，别改 ══════════════ -->
-<div id="lb">
-  <div class="stage"><img id="lbImg" alt=""></div>
-  <div class="bar">
-    <button data-lb="out">−</button>
-    <span class="pct" id="lbPct">100%</span>
-    <button data-lb="in">+</button>
-    <button data-lb="fit">复位</button>
-    <button data-lb="close">✕ 关闭</button>
-  </div>
-  <div class="cap"><b id="lbCap"></b>
-    <span class="hint">滚轮缩放 · 拖拽平移 · 双击放大 · Esc 关闭</span>
-  </div>
-</div>
-
-<!-- 加载顺序固定：config → notes → 导出库 → 内核 -->
-<script src="deck.config.js"></script>
 <script src="notes.js"></script>
-<script src="lib/html2canvas.min.js"></script>
-<script src="lib/pptxgen.bundle.js"></script>
-<script src="deck.js"></script>
-<script src="fx.js"></script>
+<script src="/_deckstage/deck.js"></script>
 
-<script>
-/* ============================================================
-   这份稿子专属的脚本写在这里：SVG 图表、特效、数据数组等。
-   不要往 deck.js 里塞。
-   注意：这段在 deck.js 之后执行，可以用 window.__go / __slides /
-   __toast / __assetsReady 这些钩子。
-   ============================================================ */
-</script>
 </body>
 </html>
