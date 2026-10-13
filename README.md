@@ -4,7 +4,7 @@
 
 **让 Agent 写演示稿，让放映像发布会。**
 
-DeckStage 是一个 macOS 放映应用，配一个给 Agent 用的 skill。Agent 用 HTML 写演示稿，DeckStage 负责把它放出来：无浏览器痕迹、双屏、演讲者视图、手机遥控、投屏友好。
+DeckStage 是一个支持 macOS 和 Windows 的桌面放映应用，配一个给 Agent 用的 skill。Agent 用 HTML 写演示稿，DeckStage 负责把它放出来：无浏览器痕迹、双屏、演讲者视图、手机遥控、投屏友好。
 
 ## 长什么样
 
@@ -279,7 +279,7 @@ Agent 通过 macOS 的 `open` 命令和 DeckStage 对话。路径需 URL 编码�
 这是早期版本。
 
 - 只在 macOS 13（Intel）上测试过。Apple Silicon 和更新的系统理论上可用，没验证
-- Windows 适配在规划中：全屏、菜单、协议注册、字体、打包都要改
+- Windows 已提供安装包；本地稿库、预览图片地址、ZIP 过滤和全屏接口选择有自动化回归覆盖，尚未完成全面真机验收。发布流程会在 Windows 打包前运行测试
 - Android 遥控 App 已在 vivo V2405A 真机验证连接、配对、台词、翻页、跳页、黑屏及音量键；iOS Safari 尚未真机验证
 - Android App 已提供连接页：输入电脑遥控地址或粘贴二维码完整链接，接入网页遥控；前台音量键翻页与防息屏已实现。锁屏翻页尚未实现
 - iOS 原生 App 暂时做不了：Capacitor 8 要求 Xcode 26，需要较新的 macOS
@@ -292,7 +292,7 @@ Agent 通过 macOS 的 `open` 命令和 DeckStage 对话。路径需 URL 编码�
 - [x] 手机网页遥控（局域网，扫码 / 配对码）
 - [x] Android App 连接页、网页遥控接入、前台音量键翻页、防息屏
 - [ ] Android 锁屏翻页
-- [ ] Windows 适配
+- [ ] Windows 兼容性持续完善与全面验收
 - [ ] iOS App 壳
 - [x] 预编译安装包（GitHub Releases）
 
@@ -305,6 +305,7 @@ src/server.js        内置静态服务（127.0.0.1，no-store，Range；/_decks
 src/kernel.js        内核位置与 <!-- @include --> 展开（静态服务、导出共用）
 kernel/              放映内核：deck.css / deck.js（放映、演讲者视图、灯箱、动效、导出）+ 导出库 lib/
 src/library.js       稿库扫描
+src/paths.js         本地路径规则：家目录、路径比较、目录包含关系、稿库显示路径
 src/store.js         配置读写
 src/services.js      稿子自带的后台服务（deckstage.json，首次需用户确认）
 src/ssh.js           远端稿库底层：解析 SSH 地址、列出远端稿子、rsync 同步、密码（askpass）与主机指纹

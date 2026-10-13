@@ -38,6 +38,8 @@ jobs:
           version=$(node -p "require('./package.json').version")
           test "$RELEASE_TAG" = "v$version" || { echo "标签 $RELEASE_TAG 与 package.json v$version 不一致"; exit 1; }
       - run: npm ci
+      - name: 桌面功能回归检查
+        run: npm test
       - name: 构建 macOS 双架构安装包和更新清单
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -78,6 +80,8 @@ jobs:
           version=$(node -p "require('./package.json').version")
           test "$RELEASE_TAG" = "v$version" || { echo "标签 $RELEASE_TAG 与 package.json v$version 不一致"; exit 1; }
       - run: npm ci
+      - name: Windows 功能回归检查
+        run: npm test
       - name: 构建 Windows 安装包和更新清单
         run: npm run dist:win
       - name: 校验 Windows 产物版本

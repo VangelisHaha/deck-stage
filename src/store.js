@@ -3,7 +3,9 @@
 const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
-const { expandHome, isDir } = require('./util');
+const { isDir } = require('./util');
+const { resolveLocalPath, pathKey, samePath } = require('./paths');
+const ssh = require('./ssh');
 const { DEFAULT_POINTER, normalizePointer } = require('./pointer');
 
 // 首次启动时预置的稿库目录（不存在的会被过滤掉）。默认为空，由用户在稿库里添加。
@@ -13,15 +15,32 @@ const EMPTY = { roots: [], recent: [], skillAgents: [], hotReload: false, truste
 
 function file() { return path.join(app.getPath('userData'), 'config.json'); }
 
+function normalizeRoot(dir) { return ssh.isRemote(dir) ? dir : resolveLocalPath(dir); }
+
+function rootKey(dir) {
+  const remote = ssh.parseRemote(dir);
+  return remote ? 'ssh:' + ssh.canonical(remote) : 'local:' + pathKey(dir);
+}
+
+function uniqueRoots(roots) {
+  const seen = new Set();
+  return roots.filter((dir) => typeof dir === 'string' && dir !== '').map(normalizeRoot).filter((dir) => {
+    const key = rootKey(dir);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function read() {
   try {
     const cfg = Object.assign({}, EMPTY, JSON.parse(fs.readFileSync(file(), 'utf8')));
-    cfg.roots = (cfg.roots || []).map(expandHome);
+    cfg.roots = uniqueRoots(cfg.roots || []);
     cfg.pointer = normalizePointer(cfg.pointer);
     return cfg;
   } catch (e) {
     if (e.code === 'ENOENT') {
-      const seeded = Object.assign({}, EMPTY, { roots: SEED_ROOTS.map(expandHome).filter(isDir) });
+      const seeded = Object.assign({}, EMPTY, { roots: SEED_ROOTS.map(resolveLocalPath).filter(isDir) });
       write(seeded);
       return seeded;
     }
@@ -43,16 +62,20 @@ function update(fn) {
 }
 
 function addRoot(dir) {
-  return update((c) => { if (!c.roots.includes(dir)) c.roots.push(dir); });
+  const key = rootKey(dir);
+  return update((c) => {
+    if (!c.roots.some((r) => rootKey(r) === key)) c.roots.push(normalizeRoot(dir));
+  });
 }
 
 function removeRoot(dir) {
-  return update((c) => { c.roots = c.roots.filter((r) => r !== dir); });
+  const key = rootKey(dir);
+  return update((c) => { c.roots = c.roots.filter((r) => rootKey(r) !== key); });
 }
 
 function touchRecent(dir) {
   return update((c) => {
-    c.recent = [{ dir, at: Date.now() }, ...c.recent.filter((r) => r.dir !== dir)].slice(0, 20);
+    c.recent = [{ dir: resolveLocalPath(dir), at: Date.now() }, ...c.recent.filter((r) => !samePath(r.dir, dir))].slice(0, 20);
   });
 }
 

@@ -16,6 +16,7 @@ const crypto = require('crypto');
 const { spawn } = require('child_process');
 const { app } = require('electron');
 const { loginShellEnv, safeName } = require('./util');
+const { isPathInside } = require('./paths');
 
 const MANIFEST = 'deckstage.json';
 const DEFAULT_WAIT_MS = 8000;
@@ -42,7 +43,7 @@ function fingerprint(root, services) {
   for (const s of services) {
     for (const arg of s.command) {
       const file = path.resolve(base, arg);
-      if (file.startsWith(base + path.sep)) {
+      if (isPathInside(base, file)) {
         try { if (fs.statSync(file).isFile()) h.update(fs.readFileSync(file)); } catch (e) { /* 不是文件就跳过 */ }
       }
     }

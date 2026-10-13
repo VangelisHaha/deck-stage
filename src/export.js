@@ -56,7 +56,7 @@ const STANDALONE_README = `这份稿子有两种放法：
 async function exportZip(root, dest) {
   const zip = new AdmZip();
   const base = deckLabel(root);
-  zip.addLocalFolder(root, base, (name) => !name.split('/').some((part) => SKIP_NAMES.has(part)));
+  zip.addLocalFolder(root, base, (name) => !name.split(/[\\/]/).some((part) => SKIP_NAMES.has(part)));
   // 浏览器版：片段展开、内核改成相对路径，内核拷进 _deckstage/（导出 PPTX 的库用不到，不带）
   const page = readPage(path.join(root, 'index.html'), root).split(KERNEL_PREFIX).join('_deckstage/');
   zip.addFile(`${base}/${STANDALONE}`, Buffer.from(page, 'utf8'));

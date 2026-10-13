@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
 const store = require('./store');
+const { samePath } = require('./paths');
 
 const DEMO_VERSION = 2; // 示例稿内容有改动时加一（2：改用 App 内置内核，稿子里不再带 deck.js / deck.css）
 const ROOT_NAME = 'DeckStage 示例';
@@ -12,7 +13,7 @@ const DECK_NAME = '欢迎使用 DeckStage';
 
 const source = () => (app.isPackaged ? path.join(process.resourcesPath, 'demo') : path.join(app.getAppPath(), 'examples', 'demo'));
 const rootDir = () => path.join(app.getPath('userData'), ROOT_NAME);
-const isDemoRoot = (dir) => path.resolve(dir) === rootDir();
+const isDemoRoot = (dir) => samePath(dir, rootDir());
 
 function copyDeck() {
   const dest = path.join(rootDir(), DECK_NAME);

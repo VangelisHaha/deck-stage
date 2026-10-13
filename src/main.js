@@ -10,6 +10,7 @@ const { buildMenu } = require('./menu');
 const skill = require('./skill');
 const { RemoteServer } = require('./remote');
 const { isDir, isDeckDir, resolveDeckRoot, readDeckTitle, safeName } = require('./util');
+const { resolveLocalPath, samePath, isPathInside } = require('./paths');
 const ssh = require('./ssh');
 const connections = require('./connections');
 const { RemoteDecks } = require('./remote-decks');
@@ -66,18 +67,21 @@ function planInfo() {
 
 function buildState() {
   const cfg = store.read();
+  const decks = [
+    ...scanRoots(cfg.roots.filter((r) => !ssh.isRemote(r) && isDir(r))),
+    ...remoteRoots(cfg.roots).flatMap((spec) => remoteDecks.decks(spec))
+  ].map((d) => (demo.isDemoRoot(d.root) ? { ...d, demo: true } : d)).sort((a, b) => b.mtime - a.mtime);
+  // 最近放映和协议选中的路径可能与扫描结果大小写不同；给界面返回扫描结果里的原路径。
+  const listedDir = (dir) => (decks.find((d) => samePath(d.dir, dir)) || {}).dir || dir;
   return {
     roots: cfg.roots.map((dir) => (ssh.isRemote(dir)
       ? { dir, label: ssh.label(ssh.parseRemote(dir)), exists: true, remote: remoteDecks.rootInfo(dir) }
       : { dir, label: path.basename(dir), exists: isDir(dir), demo: demo.isDemoRoot(dir), default: defaults.isDefaultRoot(dir) })),
-    decks: [
-      ...scanRoots(cfg.roots.filter((r) => !ssh.isRemote(r) && isDir(r))),
-      ...remoteRoots(cfg.roots).flatMap((spec) => remoteDecks.decks(spec))
-    ].map((d) => (demo.isDemoRoot(d.root) ? { ...d, demo: true } : d)).sort((a, b) => b.mtime - a.mtime),
+    decks,
     demo: { installed: demo.installed() },
     defaultRoot: defaults.rootDir(),
-    recent: cfg.recent.map((r) => r.dir),
-    selected: selectedDir,
+    recent: [...new Set(cfg.recent.map((r) => listedDir(r.dir)))],
+    selected: selectedDir && listedDir(selectedDir),
     plan: planInfo(),
     version: app.getVersion(),
     presenting: !!presentation,
@@ -319,17 +323,18 @@ function handleUrl(raw) {
         actions.addRemote(target).then((r) => toast(r.ok ? `已登记远端稿库：${ssh.label(ssh.parseRemote(target))}` : `远端稿库没登记上：${r.error}`));
         break;
       }
-      if (!target || !isDir(target)) return toast('Agent 请求登记的目录不存在');
-      store.addRoot(path.resolve(target));
-      defaults.noteAdded(path.resolve(target));
-      toast(`已登记稿库目录：${path.basename(target)}`);
+      const dir = target && resolveLocalPath(target);
+      if (!dir || !isDir(dir)) return toast('Agent 请求登记的目录不存在');
+      store.addRoot(dir);
+      defaults.noteAdded(dir);
+      toast(`已登记稿库目录：${path.basename(dir)}`);
       break;
     }
     case 'open': {
       const root = target && resolveDeckRoot(target);
       if (!root) return toast('Agent 请求打开的稿子不存在');
       // 稿子不在任何已登记的稿库里（比如 Agent 把稿子建在了别处）：把它所在的目录登记进来，否则稿库里找不到它
-      if (!store.read().roots.some((r) => !ssh.isRemote(r) && (root === r || root.startsWith(r + path.sep)))) {
+      if (!store.read().roots.some((r) => !ssh.isRemote(r) && isPathInside(r, root))) {
         store.addRoot(path.dirname(root));
         toast(`稿子不在稿库里，已登记它所在的目录：${path.basename(path.dirname(root))}`);
       } else {

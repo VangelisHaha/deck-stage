@@ -32,7 +32,7 @@ test('readPage 展开嵌套 include，缺失和越界的片段不会读到稿子
   assert.match(html, /data-t="乙"/); // 片段里的路径相对片段自己
   assert.match(html, /找不到 acts\/missing\.html/);
   assert.match(html, /越界，已忽略：\.\.\/escape\.html/);
-  assert.deepStrictEqual(includesOf(path.join(dir, 'index.html'), dir).map((f) => path.relative(dir, f)).sort(),
+  assert.deepStrictEqual(includesOf(path.join(dir, 'index.html'), dir).map((f) => path.relative(dir, f).split(path.sep).join('/')).sort(),
     ['acts/a.html', 'acts/b.html', 'acts/missing.html']);
 });
 

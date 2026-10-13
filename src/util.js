@@ -5,11 +5,7 @@ const os = require('os');
 const path = require('path');
 const { execFile } = require('child_process');
 const { includesOf } = require('./kernel');
-
-function expandHome(p) {
-  if (!p) return p;
-  return p === '~' || p.startsWith('~/') ? path.join(os.homedir(), p.slice(1)) : p;
-}
+const { expandHome, resolveLocalPath } = require('./paths');
 
 function isDir(p) {
   try { return fs.statSync(p).isDirectory(); } catch (e) { return false; }
@@ -23,7 +19,7 @@ function isDeckDir(dir) {
 
 // 用户可能选稿子目录，也可能选它的上一层（里面有 slides/）
 function resolveDeckRoot(input) {
-  const dir = path.resolve(expandHome(input || ''));
+  const dir = resolveLocalPath(input || '');
   if (!isDir(dir)) return null;
   if (isDeckDir(dir)) return dir;
   const sub = path.join(dir, 'slides');

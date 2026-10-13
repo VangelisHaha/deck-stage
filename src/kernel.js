@@ -4,6 +4,7 @@
 // 静态服务、导出 HTML 包都走这里，规则只有一份。
 const fs = require('fs');
 const path = require('path');
+const { samePath, isPathInside } = require('./paths');
 
 const KERNEL_DIR = path.join(__dirname, '..', 'kernel');
 const KERNEL_PREFIX = '/_deckstage/';
@@ -14,7 +15,7 @@ const MAX_DEPTH = 5;
 function kernelFile(pathname) {
   if (!pathname.startsWith(KERNEL_PREFIX)) return null;
   const file = path.resolve(KERNEL_DIR, '.' + pathname.slice(KERNEL_PREFIX.length - 1));
-  return file.startsWith(KERNEL_DIR + path.sep) ? file : null;
+  return isPathInside(KERNEL_DIR, file) && !samePath(KERNEL_DIR, file) ? file : null;
 }
 
 // 读一个 HTML 文件并展开 include。片段路径相对于引用它的文件，不能跑出稿子目录；
@@ -25,7 +26,7 @@ function readPage(file, root, depth = 0) {
   const base = path.resolve(root);
   return html.replace(INCLUDE_RE, (_m, rel) => {
     const target = path.resolve(path.dirname(file), rel);
-    if (target !== base && !target.startsWith(base + path.sep)) return `<!-- @include 越界，已忽略：${rel} -->`;
+    if (!isPathInside(base, target)) return `<!-- @include 越界，已忽略：${rel} -->`;
     try {
       return readPage(target, root, depth + 1);
     } catch (e) {
@@ -42,12 +43,13 @@ function includesOf(file, root) {
     try { html = fs.readFileSync(f, 'utf8'); } catch (e) { return; }
     for (const m of html.matchAll(INCLUDE_RE)) {
       const target = path.resolve(path.dirname(f), m[1]);
+      if (!isPathInside(root, target)) continue;
       out.push(target);
       if (depth < MAX_DEPTH) walk(target, depth + 1);
     }
   };
   walk(file, 0);
-  return out.filter((f) => f.startsWith(path.resolve(root) + path.sep));
+  return out;
 }
 
 module.exports = { KERNEL_DIR, KERNEL_PREFIX, kernelFile, readPage, includesOf };

@@ -5,6 +5,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const { BrowserWindow, app } = require('electron');
 const { startServer } = require('./server');
 const { latestMtime } = require('./util');
@@ -40,7 +41,7 @@ class Previews {
     try { meta = JSON.parse(fs.readFileSync(path.join(base, 'meta.json'), 'utf8')); } catch (e) { return null; }
     const slides = meta.slides.map((title, i) => {
       const f = path.join(base, `${String(i + 1).padStart(3, '0')}.jpg`);
-      return { i, title, thumb: fs.existsSync(f) ? `file://${f.split('/').map(encodeURIComponent).join('/')}` : null };
+      return { i, title, thumb: fs.existsSync(f) ? pathToFileURL(f).href : null };
     });
     return { title: meta.title, total: slides.length, minutes: meta.minutes, slides, done: slides.every((s) => s.thumb) };
   }

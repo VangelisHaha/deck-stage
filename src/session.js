@@ -153,11 +153,12 @@ class Presentation {
     this.target = { mode: target.mode, displayId: display.id };
     this.lastApply = Date.now();
 
-    if (win.isSimpleFullScreen()) win.setSimpleFullScreen(false);
+    const fullscreen = process.platform === 'darwin' ? win.isSimpleFullScreen() : win.isFullScreen();
+    if (fullscreen) this.setFullscreen(false);
     if (this.target.mode === 'screen') {
       win.setAspectRatio(0);
       win.setBounds(display.bounds);
-      win.setSimpleFullScreen(true);
+      this.setFullscreen(true);
     } else {
       win.setAspectRatio(16 / 9);
       win.setBounds(fitWindow16x9(display.workArea));
@@ -165,6 +166,12 @@ class Presentation {
     win.webContents.send('stage:fullscreen', this.target.mode === 'screen');
     this.placePresenter();
     this.onChange();
+  }
+
+  // macOS 保留不切换 Space 的简易全屏；Windows / Linux 使用各自支持的全屏接口。
+  setFullscreen(on) {
+    if (process.platform === 'darwin') this.audience.setSimpleFullScreen(on);
+    else this.audience.setFullScreen(on);
   }
 
   placePresenter() {
@@ -335,7 +342,7 @@ class Presentation {
     if (!on) return;
     try {
       this.watcher = fs.watch(this.root, { recursive: true }, (_ev, name) => {
-        if (name && /(^|\/)(lib|node_modules|\.git)(\/|$)/.test(name)) return;
+        if (name && /(^|[\\/])(lib|node_modules|\.git)([\\/]|$)/.test(name)) return;
         clearTimeout(this.watchTimer);
         this.watchTimer = setTimeout(() => this.reloadWindows(), 300);
       });

@@ -28,6 +28,9 @@ const SKIP_SEG = new Set(['node_modules', '.git', 'lib', 'assets', 'dist']);
 function parseRemote(input) {
   const s = String(input || '').trim();
   if (!s) return null;
+  // Windows 盘符路径（含 C:slides）和以反斜杠开头的 UNC / 扩展路径都是本地路径。
+  // 单字母 SSH 主机请用 ssh://c/...，避免与盘符冲突。
+  if (/^[a-z]:/i.test(s) || s.startsWith('\\')) return null;
   let m = /^ssh:\/\/(?:([^@/\s]+)@)?(\[[^\]]+\]|[^:/\s]+)(?::(\d+))?(\/.*)?$/.exec(s);
   let user, host, port, p;
   if (m) {
@@ -36,7 +39,7 @@ function parseRemote(input) {
     if (p === '/~' || p.startsWith('/~/')) p = p.slice(1); // ssh://host/~/x 表示家目录下的 x
   } else {
     m = /^(?:([^@/\s:]+)@)?([^:/\s@]+):(.*)$/.exec(s);
-    if (!m || /^[/.~]/.test(s)) return null; // 本地路径不会在斜杠之前出现冒号
+    if (!m || /^[/.~]/.test(s)) return null; // 排除 POSIX 绝对路径与相对路径
     [, user, host] = m;
     p = m[3];
   }

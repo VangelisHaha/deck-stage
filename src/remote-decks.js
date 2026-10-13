@@ -8,6 +8,7 @@ const path = require('path');
 const { app } = require('electron');
 const ssh = require('./ssh');
 const { isDeckDir, deckLabel, formatTime } = require('./util');
+const { deckRelativePath } = require('./paths');
 
 const STALE_MS = 30 * 1000;
 
@@ -110,7 +111,7 @@ class RemoteDecks {
     const group = ssh.label(r);
     return s.decks.map((d) => {
       const dir = this.localDirFor(spec, s.root, d.remoteDir);
-      const rel = path.posix.relative(s.root, d.remoteDir).replace(/(^|\/)(slides|deck|dist)$/i, '');
+      const rel = deckRelativePath(s.root, d.remoteDir, path.posix);
       return {
         dir,
         root: spec,

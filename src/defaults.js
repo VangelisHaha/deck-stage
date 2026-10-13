@@ -5,15 +5,16 @@ const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
 const store = require('./store');
+const { samePath } = require('./paths');
 
 const rootDir = () => path.join(app.getPath('documents'), 'DeckStage');
-const isDefaultRoot = (dir) => path.resolve(String(dir)) === rootDir();
+const isDefaultRoot = (dir) => samePath(dir, rootDir());
 
 function ensure() {
   const d = store.read().defaults || {};
   if (d.removed) return;
   try { fs.mkdirSync(rootDir(), { recursive: true }); } catch (e) { return; }
-  if (!store.read().roots.includes(rootDir())) store.addRoot(rootDir());
+  if (!store.read().roots.some(isDefaultRoot)) store.addRoot(rootDir());
 }
 
 // 用户在稿库里移除默认稿库：只取消登记，不删文件，也不再自动加回

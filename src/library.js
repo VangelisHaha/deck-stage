@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { isDeckDir, readDeckTitle, deckLabel, latestMtime, formatTime } = require('./util');
+const { pathKey, resolveLocalPath, deckRelativePath } = require('./paths');
 
 const SKIP = new Set(['node_modules', '.git', 'lib', 'assets', 'dist']);
 const MAX_DEPTH = 4;
@@ -13,10 +14,11 @@ function scanRoots(roots) {
 
   function walk(rootLabel, rootDir, dir, depth) {
     if (isDeckDir(dir)) {
-      if (!seen.has(dir)) {
-        seen.add(dir);
+      const key = pathKey(dir);
+      if (!seen.has(key)) {
+        seen.add(key);
         const mtime = latestMtime(dir);
-        const rel = path.relative(rootDir, dir).replace(/(^|\/)(slides|deck|dist)$/i, '');
+        const rel = deckRelativePath(rootDir, dir);
         decks.push({
           dir,
           root: rootDir,
@@ -39,7 +41,10 @@ function scanRoots(roots) {
     }
   }
 
-  for (const root of roots) walk(path.basename(root), root, root, 0);
+  for (const input of roots) {
+    const root = resolveLocalPath(input);
+    walk(path.basename(root), root, root, 0);
+  }
   return decks.sort((a, b) => b.mtime - a.mtime);
 }
 

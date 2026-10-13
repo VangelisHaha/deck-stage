@@ -4,6 +4,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { kernelFile, readPage } = require('./kernel');
+const { isPathInside } = require('./paths');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -53,7 +54,7 @@ function makeHandler(root) {
     const kf = kernelFile(pathname);
     if (kf) return serveFile(req, res, kf);
     let file = path.resolve(path.join(base, pathname));
-    if (file !== base && !file.startsWith(base + path.sep)) return send(res, 403, 'Forbidden');
+    if (!isPathInside(base, file)) return send(res, 403, 'Forbidden');
     try { if (fs.statSync(file).isDirectory()) file = path.join(file, 'index.html'); } catch (e) { /* 交给 serveFile 回 404 */ }
     if (path.extname(file).toLowerCase() === '.html') {
       let html;
