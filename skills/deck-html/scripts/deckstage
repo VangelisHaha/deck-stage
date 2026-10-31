@@ -18,6 +18,7 @@ usage() {
   open <稿子目录>            在 DeckStage 稿库中选中
   doctor                     检查本机命令和 skill 安装
   capabilities               查看可用的页面、动效和互动能力
+  styles                     查看写作风格预设和自定义格式
 EOF
 }
 
@@ -36,6 +37,7 @@ case "$cmd" in
     python3 "$CHECK" --help >/dev/null
     ;;
   capabilities) exec sed -n '/^## 能力清单/,/^## /p' "$ROOT/SKILL.md" ;;
+  styles) exec sed -n '/^## 写作风格预设/,/^## /p' "$ROOT/SKILL.md" ;;
   help|-h|--help) usage ;;
   *) echo "未知命令：$cmd" >&2; usage >&2; exit 2 ;;
 esac

@@ -15,10 +15,11 @@ html.stage-idle, html.stage-idle * { cursor: none !important; }
 html.stage-fs #stage-drag { display: none; }
 #stage-black { position: fixed; inset: 0; background: #000; z-index: 2147483646; display: none; }
 #stage-black.on { display: block; }
-.stage-end { margin-left: 12px; height: 32px; padding: 0 14px; border: 1px solid #F1EEE6; background: transparent; color: #F1EEE6; font: 12px "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: 1px; cursor: pointer; white-space: nowrap; }
-.stage-end.confirm { background: #FF4F1F; border-color: #FF4F1F; color: #121212; }
+/* App chrome must win over any deck theme: never let a稿子的 button/reset rule hide the end control. */
+#pv .pvtop .stage-end, body > .stage-end { position: fixed !important; top: 10px !important; right: 10px !important; z-index: 2147483647 !important; display: inline-flex !important; visibility: visible !important; opacity: 1 !important; align-items: center !important; justify-content: center !important; margin: 0 !important; height: 34px !important; min-width: 92px !important; padding: 0 14px !important; border: 1px solid #F1EEE6 !important; border-radius: 4px !important; background: #0F0F0E !important; color: #F1EEE6 !important; font: 12px "SF Mono", ui-monospace, Menlo, monospace !important; letter-spacing: 1px !important; line-height: 1 !important; cursor: pointer !important; white-space: nowrap !important; pointer-events: auto !important; }
+#pv .pvtop .stage-end.confirm, body > .stage-end.confirm { background: #FF4F1F !important; border-color: #FF4F1F !important; color: #121212 !important; }
 #stage-ink { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 2147482000; pointer-events: none; }
-.stage-end.float { position: fixed; top: 10px; right: 10px; z-index: 2147483000; }
+.stage-end.float { position: fixed !important; top: 10px !important; right: 10px !important; z-index: 2147483647 !important; }
 `;
 const IDLE_MS = 2000;
 
@@ -28,8 +29,9 @@ function addEndButton() {
   btn.className = 'stage-end';
   btn.type = 'button';
   btn.textContent = '结束放映';
-  const host = document.querySelector('#pv .pvtop');
-  if (host) host.appendChild(btn); else { btn.classList.add('float'); document.body.appendChild(btn); }
+  // Keep it outside the theme-controlled toolbar. A deck may reset button styles or clip .pvtop.
+  btn.classList.add('float');
+  document.body.appendChild(btn);
   let timer;
   btn.addEventListener('click', () => {
     if (btn.classList.contains('confirm')) { ipcRenderer.send('stage:end'); return; }
