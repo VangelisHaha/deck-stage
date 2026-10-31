@@ -466,6 +466,10 @@ ipcMain.on('stage:visitor-qr', async (e, on) => {
   if (!presentation || !presentation.presenter || e.sender !== presentation.presenter.webContents) return;
   presentation.toggleVisitorQr(on, on ? await remote.info() : null);
 });
+ipcMain.on('stage:remote-qr', async (e, on) => {
+  if (!presentation || !presentation.presenter || e.sender !== presentation.presenter.webContents) return;
+  presentation.toggleRemoteQr(on, on ? await remote.info() : null);
+});
 ipcMain.handle('stage:copy', (_e, text) => { clipboard.writeText(String(text)); });
 
 // ---------- 生命周期 ----------

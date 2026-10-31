@@ -337,6 +337,11 @@ class Presentation {
     this.audience.webContents.send('stage:visitor-qr', { on: !!on, qr: info && info.visitorQr, url: info && info.visitorUrl });
   }
 
+  toggleRemoteQr(on, info = null) {
+    if (!this.presenter || this.presenter.isDestroyed()) return;
+    this.presenter.webContents.send('stage:remote-qr', { on: !!on, qr: info && info.qr, url: info && info.base });
+  }
+
   toggleBlackout() {
     this.blackout = !this.blackout;
     if (this.audience) this.audience.webContents.send('stage:blackout', this.blackout);
