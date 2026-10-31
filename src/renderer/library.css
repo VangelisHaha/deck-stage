@@ -139,7 +139,7 @@ footer { height: 84px; flex-shrink: 0; background: var(--ink); color: var(--pape
 .pointer-sheet { width: 880px; max-height: calc(100vh - 56px); overflow-y: auto; }
 .pointer-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; font-family: var(--serif); font-weight: 900; font-size: 18px; }
 .pointer-heading .mono, .pointer-heading .muted { font-family: var(--mono); font-weight: 400; font-size: 11px; letter-spacing: .04em; }
-.pointer-styles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 14px; }
+.pointer-styles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 14px; }
 .pointer-choice { min-width: 0; height: 132px; padding: 12px 10px 10px; border: 1px solid var(--rule); background: #E9E5DB; color: var(--ink); text-align: left; position: relative; }
 .pointer-choice:hover { border-color: var(--ink); }
 .pointer-choice.on { border: 2px solid var(--ink); padding: 11px 9px 9px; background: var(--paper); box-shadow: inset 0 -5px 0 var(--signal); }
@@ -147,6 +147,9 @@ footer { height: 84px; flex-shrink: 0; background: var(--ink); color: var(--pape
 .pointer-choice b { display: block; font-family: var(--serif); font-size: 15px; line-height: 1.25; }
 .pointer-choice small { display: block; margin-top: 4px; color: var(--muted); font-family: var(--mono); font-size: 9.5px; line-height: 1.35; }
 .pointer-choice.on::after { content: "已选"; position: absolute; right: 8px; top: 7px; color: var(--signal); font-family: var(--mono); font-size: 10px; }
+.play-targets { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.play-targets label { display: block; color: var(--muted); font: 11px var(--mono); letter-spacing: .04em; }
+.play-targets .field { margin-top: 6px; height: 38px; }
 .pointer-sizes { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 12px; border: 1px solid var(--ink); }
 .pointer-size { height: 48px; border: 0; border-right: 1px solid var(--ink); background: transparent; color: var(--ink); font-family: var(--serif); font-weight: 900; font-size: 16px; }
 .pointer-size:last-child { border-right: 0; }

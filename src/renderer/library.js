@@ -156,6 +156,18 @@
         : '还没收到 Agent 的回报。装好后这里会变成「已安装 · Agent 名」。'));
   }
 
+  let playTargets = [];
+  async function loadPlayTargets() {
+    playTargets = await window.stage.getPlayTargets();
+    const fill = (id, selected) => {
+      const box = $(id); box.textContent = '';
+      playTargets.forEach((t) => { const o = document.createElement('option'); o.value = t.id; o.textContent = t.label; o.selected = String(t.id) === String(selected); box.appendChild(o); });
+    };
+    const primary = playTargets.find((t) => t.checked) || playTargets[0];
+    fill('audienceTarget', primary && primary.id);
+    fill('presenterTarget', primary && primary.id);
+  }
+
   function renderPointerSetup() {
     if (!state || !state.pointer || !playPointer) return;
     const deck = state.decks.find((d) => d.dir === selected);
@@ -191,6 +203,7 @@
     syncPreview();
     if (!on) return;
     playPointer = Object.assign({}, state.pointer.value);
+    loadPlayTargets().then(renderPointerSetup);
     renderPointerSetup();
   }
 
@@ -198,8 +211,9 @@
     if (!selected || !playPointer) return;
     const dir = selected;
     await window.stage.setPointer(playPointer);
+    const target = { audience: $('audienceTarget').value, presenter: $('presenterTarget').value };
     showPlaySetup(false);
-    window.stage.open(dir);
+    window.stage.open(dir, target);
   }
 
   // ---- 预览浮窗：目录 + 每页缩略图 ----

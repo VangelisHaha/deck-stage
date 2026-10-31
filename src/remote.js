@@ -195,6 +195,12 @@ class RemoteServer {
     if (req.method === 'GET' && p === '/visitor.html') return serveFile(req, res, path.join(ASSET_DIR, 'visitor.html'));
     if (req.method === 'GET' && ASSETS[p]) return serveFile(req, res, path.join(ASSET_DIR, ASSETS[p]));
 
+    if (req.method === 'GET' && p === '/api/visitor-info') {
+      if (!this.enabled) return json(res, 404, { error: 'disabled' });
+      const base = lanAddresses().map((ip) => `http://${ip}:${this.port}`)[0] || `http://127.0.0.1:${this.port}`;
+      const svg = await QRCode.toString(`${base}/?v=${this.visitorToken}`, { type: 'svg', margin: 1, color: { dark: '#121212', light: '#FAF8F3' } });
+      return json(res, 200, { qr: 'data:image/svg+xml;utf8,' + encodeURIComponent(svg), url: `${base}/?v=${this.visitorToken}` });
+    }
     if (req.method === 'GET' && p === '/api/me') return this.sidOf(req) ? json(res, 200, { ok: true }) : json(res, 401, { error: 'auth' });
 
     if (req.method === 'POST' && p === '/api/pair') {

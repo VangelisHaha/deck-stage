@@ -22,7 +22,8 @@ class Presentation {
     this.server = null;
     this.audience = null;
     this.presenter = null;
-    this.target = null;     // { mode: 'screen' | 'window', displayId }
+    this.target = null;     // audience target: { mode: 'screen' | 'window', displayId }
+    this.presenterTarget = null;
     this.manual = false;    // 用户手动选过投屏位置后，热插拔不再自动改
     this.blackout = false;
     this.ending = false;
@@ -46,13 +47,22 @@ class Presentation {
     this.pageAt = Date.now();
   }
 
-  async start(hotReload) {
+  async start(hotReload, layoutTargets = null) {
     await this.services.start(); // 稿子自带的后台服务（deckstage.json），先于窗口启动，页面一进来就能连上
     this.server = await startServer(this.root, stablePort(this.root));
     await session.defaultSession.clearCache();
     this.blocker = powerSaveBlocker.start('prevent-display-sleep');
 
     this.target = this.defaultTarget();
+    if (layoutTargets && layoutTargets.audience) {
+      if (layoutTargets.audience === 'window') this.target = { mode: 'window', displayId: screen.getPrimaryDisplay().id };
+      else {
+        const display = this.displayById(layoutTargets.audience);
+        if (display) this.target = { mode: 'screen', displayId: display.id };
+      }
+    }
+    this.presenterTarget = layoutTargets && layoutTargets.presenter && layoutTargets.presenter !== 'window'
+      ? this.displayById(layoutTargets.presenter) : null;
     this.audience = this.makeWindow('audience', `${this.server.origin}/index.html`);
     this.presenter = this.makeWindow('presenter', `${this.server.origin}/index.html?notes=1`);
     this.audience.on('closed', () => this.end());
@@ -117,7 +127,7 @@ class Presentation {
 
   displays() { return screen.getAllDisplays(); }
 
-  displayById(id) { return this.displays().find((d) => d.id === id) || null; }
+  displayById(id) { return this.displays().find((d) => String(d.id) === String(id)) || null; }
 
   defaultTarget() {
     const primary = screen.getPrimaryDisplay();
@@ -144,6 +154,12 @@ class Presentation {
       checked: this.target.mode === 'window'
     });
     return list;
+  }
+
+  setPresenterTarget(displayId) {
+    this.presenterTarget = this.displayById(displayId) || null;
+    this.placePresenter();
+    this.onChange();
   }
 
   applyTarget(target, { manual = true } = {}) {
@@ -180,8 +196,8 @@ class Presentation {
     if (!win || win.isDestroyed()) return;
     const audienceDisplay = this.displayById(this.target.displayId) || screen.getPrimaryDisplay();
     if (this.target.mode === 'screen') {
-      const other = this.displays().find((d) => d.id !== audienceDisplay.id);
-      if (other) {
+      const other = this.presenterTarget || this.displays().find((d) => d.id !== audienceDisplay.id);
+      if (other && other.id !== audienceDisplay.id) {
         const wa = other.workArea;
         return win.setBounds({ x: wa.x + 24, y: wa.y + 24, width: wa.width - 48, height: wa.height - 48 });
       }
@@ -314,6 +330,11 @@ class Presentation {
   // 演讲者窗口的光点 / 划线消息转给观众窗口
   relayPointer(msg) {
     if (this.audience && !this.audience.isDestroyed()) this.audience.webContents.send('stage:pointer', msg);
+  }
+
+  toggleVisitorQr(on, info = null) {
+    if (!this.audience || this.audience.isDestroyed()) return;
+    this.audience.webContents.send('stage:visitor-qr', { on: !!on, qr: info && info.visitorQr, url: info && info.visitorUrl });
   }
 
   toggleBlackout() {

@@ -15,6 +15,12 @@ html.stage-idle, html.stage-idle * { cursor: none !important; }
 html.stage-fs #stage-drag { display: none; }
 #stage-black { position: fixed; inset: 0; background: #000; z-index: 2147483646; display: none; }
 #stage-black.on { display: block; }
+#stage-visitor-qr { position: fixed; inset: 0; z-index: 2147483645; display: none; align-items: center; justify-content: center; background: rgba(15,15,14,.94); color: #F1EEE6; }
+#stage-visitor-qr.on { display: flex; }
+#stage-visitor-qr .qr-card { width: min(420px, 80vw); padding: 28px; background: #F1EEE6; color: #0F0F0E; text-align: center; }
+#stage-visitor-qr img { width: 260px; height: 260px; display: block; margin: 18px auto; background: #FAF8F3; }
+#stage-visitor-qr .qr-title { font: 700 22px Georgia, serif; }
+#stage-visitor-qr .qr-hint { font: 12px "SF Mono", monospace; color: #666; line-height: 1.6; }
 /* App chrome must win over any deck theme: never let a稿子的 button/reset rule hide the end control. */
 #pv .pvtop .stage-end, body > .stage-end { position: fixed !important; top: 10px !important; right: 10px !important; z-index: 2147483647 !important; display: inline-flex !important; visibility: visible !important; opacity: 1 !important; align-items: center !important; justify-content: center !important; margin: 0 !important; height: 34px !important; min-width: 92px !important; padding: 0 14px !important; border: 1px solid #F1EEE6 !important; border-radius: 4px !important; background: #0F0F0E !important; color: #F1EEE6 !important; font: 12px "SF Mono", ui-monospace, Menlo, monospace !important; letter-spacing: 1px !important; line-height: 1 !important; cursor: pointer !important; white-space: nowrap !important; pointer-events: auto !important; }
 #pv .pvtop .stage-end.confirm, body > .stage-end.confirm { background: #FF4F1F !important; border-color: #FF4F1F !important; color: #121212 !important; }
@@ -394,10 +400,14 @@ function initPresenter(styleEl) {
   const fontDn = btn('A-', '-', () => setFont(font - 1));
   const fontUp = btn('A+', '+', () => setFont(font + 1));
   const helpBtn = btn('帮助', '?', () => toggleHelp());
-  bar.append(tocBtn, layoutBtn, penBtn, clearBtn, helpBtn, sp, fontDn, fontUp);
+  const visitorBtn = btn('访客入口', 'V', () => {
+    const on = !document.getElementById('stage-visitor-qr')?.classList.contains('on');
+    ipcRenderer.send('stage:visitor-qr', on);
+  });
+  bar.append(tocBtn, layoutBtn, penBtn, clearBtn, helpBtn, visitorBtn, sp, fontDn, fontUp);
 
   // ---- 操作指引：底部常驻一行提示，? 打开完整快捷键表 ----
-  const HINT_IDLE = [['F', '全屏/窗口'], ['D', '换屏'], ['B', '黑屏'], ['P', '回到本窗'], ['G', '目录'], ['?', '全部快捷键']];
+  const HINT_IDLE = [['F', '全屏/窗口'], ['D', '换屏'], ['B', '黑屏'], ['P', '回到本窗'], ['G', '目录'], ['V', '访客入口'], ['?', '全部快捷键']];
   const setHint = () => {
     hint.textContent = '';
     hint.classList.toggle('toc', tocOpen);
@@ -410,7 +420,7 @@ function initPresenter(styleEl) {
   };
   const HELP = [
     ['放映（观众屏幕）', [['F', '观众窗口 全屏 / 窗口模式'], ['D', '观众窗口换到下一块屏幕'], ['B', '黑屏，再按恢复'], ['P', '回到演讲者窗口'], ['← →  空格', '翻页'], ['Esc', '退出全屏；窗口模式连按两次结束放映']]],
-    ['演讲者窗口', [['G', '打开目录（搜页码 / 标题 / 拼音首字母）；Esc 收起'], ['数字 + 回车', '直接跳到第几页'], ['L', '切换布局：均衡 / 画面优先 / 台词优先'], ['+  -', '台词字号'], ['鼠标移入当前页', '观众屏幕出现手形指针'], ['Shift + 拖动', '在观众屏幕上划线'], ['E', '画笔常开 / 关闭'], ['C', '清除笔迹（翻页也会清）'], ['?', '打开本说明；Esc 或 ✕ 关闭']]]
+    ['演讲者窗口', [['G', '打开目录（搜页码 / 标题 / 拼音首字母）；Esc 收起'], ['数字 + 回车', '直接跳到第几页'], ['L', '切换布局：均衡 / 画面优先 / 台词优先'], ['+  -', '台词字号'], ['鼠标移入当前页', '观众屏幕出现手形指针'], ['Shift + 拖动', '在观众屏幕上划线'], ['E', '画笔常开 / 关闭'], ['C', '清除笔迹（翻页也会清）'], ['V', '显示/隐藏访客二维码'], ['?', '打开本说明；Esc 或 ✕ 关闭']]]
   ];
   const buildHelp = () => {
     const hd = el('div', null, 'hd');
@@ -840,6 +850,16 @@ window.addEventListener('DOMContentLoaded', () => {
   const black = document.createElement('div');
   black.id = 'stage-black';
   document.body.appendChild(black);
+
+  const visitorQr = document.createElement('div');
+  visitorQr.id = 'stage-visitor-qr';
+  visitorQr.innerHTML = '<div class="qr-card"><div class="qr-title">手机 / 电脑扫码查看</div><img alt="访客视图二维码"><div class="qr-hint">打开后会跟随当前演示同步，也可以参与页面互动<br>再次点击“访客入口”即可收起</div></div>';
+  document.body.appendChild(visitorQr);
+  ipcRenderer.on('stage:visitor-qr', (_e, data) => {
+    const on = data && typeof data === 'object' ? data.on : data;
+    if (data && data.qr) visitorQr.querySelector('img').src = data.qr;
+    visitorQr.classList.toggle('on', !!on);
+  });
 
   let timer;
   const wake = () => {
