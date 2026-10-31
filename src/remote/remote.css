@@ -17,6 +17,8 @@ button, input, select { font-family: inherit; }
 .sq.off { background: transparent; border: 1.5px solid var(--dim); }
 h1 { margin: 20px 0 0; font-family: var(--serif); font-weight: 900; font-size: 46px; line-height: 1.15; }
 .sub { margin: 16px 0 0; font-size: 14px; line-height: 1.7; color: var(--dim); }
+.role-pill { display: inline-block; margin-top: 22px; padding: 7px 10px; border: 1px solid var(--signal); color: var(--signal); font: 11px var(--mono); letter-spacing: .06em; }
+#retry { display: inline-block; margin-left: 8px; color: #121212; padding: 0; }
 .label { font-family: var(--mono); font-size: 11px; letter-spacing: 2px; color: var(--dim); }
 .err { min-height: 22px; margin: 8px 0; font-size: 13px; color: var(--signal); }
 
@@ -31,6 +33,8 @@ button { cursor: pointer; }
 
 /* 放映中：正文占主体，信息与控制各收成一行。 */
 .live { padding: calc(env(safe-area-inset-top) + 12px) 20px calc(env(safe-area-inset-bottom) + 12px); height: 100%; height: 100dvh; min-height: 0; overflow: hidden; }
+@media (orientation: landscape) and (max-height: 600px) { .live { padding-top: 8px; } .notes p { font-size: clamp(18px, 4vw, 28px); } .next { height: 72px; } .controls button { height: 44px; } }
+@media (min-width: 760px) { .live { max-width: 1100px; margin: auto; } .notes p { font-size: clamp(24px, 3vw, 42px); } }
 .bar { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
 .page-count { display: flex; align-items: baseline; gap: 8px; }
 .page-count .sq { align-self: center; }
@@ -62,7 +66,7 @@ button { cursor: pointer; }
 .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--rule); font-size: 14px; }
 .toggle-row select { background: transparent; color: var(--paper); border: 1px solid var(--rule); padding: 6px 8px; font-size: 14px; }
 .toggle-row input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--signal); }
-.conn { position: fixed; left: 0; right: 0; top: 0; padding: calc(env(safe-area-inset-top) + 8px) 16px 8px; background: var(--signal); color: #121212; font-size: 13px; text-align: center; }
+.conn { position: fixed; left: 0; right: 0; top: 0; padding: calc(env(safe-area-inset-top) + 8px) 16px 8px; background: var(--signal); color: #121212; font-size: 13px; text-align: center; z-index: 20; }
 
 /* 跳页 */
 .sheet { position: fixed; inset: 0; background: var(--ink); padding: calc(env(safe-area-inset-top) + 20px) 24px 0; overflow-y: auto; }

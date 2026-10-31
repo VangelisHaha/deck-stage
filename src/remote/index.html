@@ -11,9 +11,10 @@
 <body>
 
 <section id="pair" class="screen" hidden>
-  <div class="kicker">DECKSTAGE · REMOTE</div>
+  <div class="kicker"><span class="sq"></span>DECKSTAGE · REMOTE</div>
+  <div class="role-pill">遥控端 · 只有你能控制演示</div>
   <h1>连上<br>电脑</h1>
-  <p class="sub">在电脑的 DeckStage 里打开「手机遥控」，扫二维码，或输入屏幕上的 6 位配对码。</p>
+  <p class="sub">扫码会自动连接；也可以输入电脑屏幕上的 6 位配对码。访客观看请扫描「访客视图」二维码。</p>
   <form id="pairForm">
     <label class="label" for="code">配对码</label>
     <input id="code" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" placeholder="000000">
@@ -43,7 +44,7 @@
     <button id="btnNext" class="next" type="button">下一页 ▶</button>
     <button id="btnMore" class="outline more" type="button" aria-haspopup="dialog">更多</button>
   </div>
-  <div id="conn" class="conn" hidden>连接中断，正在重连…</div>
+  <div id="conn" class="conn" hidden>连接中断，正在重连…<button id="retry" class="link" type="button">重新连接</button></div>
 </section>
 
 <section id="options" class="sheet options" role="dialog" aria-label="更多操作" hidden>

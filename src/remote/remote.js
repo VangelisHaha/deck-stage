@@ -101,6 +101,7 @@
 
   function connect() {
     if (es) es.close();
+    $('conn').hidden = true;
     fetch('/api/me').then((r) => {
       if (r.status === 401) { show('pair'); return; }
       es = new EventSource('/api/events?cid=' + cid);
@@ -120,6 +121,7 @@
   }
 
   // ---------- 配对 ----------
+  $('retry').onclick = connect;
   $('pairForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const code = $('code').value.trim();
@@ -158,6 +160,9 @@
   });
   $('btnNext').onclick = act.next;
   $('btnPrev').onclick = act.prev;
+  let touchX = 0;
+  $('notes').addEventListener('touchstart', (e) => { touchX = e.touches[0].clientX; }, { passive: true });
+  $('notes').addEventListener('touchend', (e) => { const dx = e.changedTouches[0].clientX - touchX; if (Math.abs(dx) > 70) (dx < 0 ? act.next : act.prev)(); }, { passive: true });
   $('btnBlack').onclick = () => { act.black(); $('options').hidden = true; };
 
   // 点刻度条按位置跳页
