@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+CHECK="$ROOT/scripts/check_deck.py"
+NEW="$ROOT/scripts/new_deck.sh"
+OPEN="$ROOT/scripts/open_in_deckstage.sh"
+
+usage() {
+  cat <<'EOF'
+用法：deckstage <命令> [参数]
+
+命令：
+  new <标题>                 在默认稿库新建演示稿
+  new <目录> <标题>          在指定目录新建演示稿
+  check <稿子目录>           体检演示稿
+  strict <稿子目录>          体检，并把 warning 视为失败
+  open <稿子目录>            在 DeckStage 稿库中选中
+  doctor                     检查本机命令和 skill 安装
+  capabilities               查看可用的页面、动效和互动能力
+EOF
+}
+
+cmd="${1:-help}"
+shift || true
+case "$cmd" in
+  new) exec "$NEW" "$@" ;;
+  check) exec python3 "$CHECK" "$@" ;;
+  strict) exec python3 "$CHECK" "$@" --strict ;;
+  open) exec "$OPEN" "$@" ;;
+  doctor)
+    command -v python3 >/dev/null || { echo "缺少 python3" >&2; exit 1; }
+    command -v open >/dev/null || { echo "缺少 macOS open 命令" >&2; exit 1; }
+    test -f "$ROOT/SKILL.md" || { echo "skill 文件不完整：$ROOT" >&2; exit 1; }
+    echo "deck-html skill 就绪：$ROOT"
+    python3 "$CHECK" --help >/dev/null
+    ;;
+  capabilities) exec sed -n '/^## 能力清单/,/^## /p' "$ROOT/SKILL.md" ;;
+  help|-h|--help) usage ;;
+  *) echo "未知命令：$cmd" >&2; usage >&2; exit 2 ;;
+esac

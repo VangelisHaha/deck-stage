@@ -47,6 +47,7 @@ const previews = new Previews({
 // 手机遥控：默认关闭，需要时在稿库里手动开启。放映状态变化时广播给所有已连手机。
 const remote = new RemoteServer({
   onCommand: (cmd) => (presentation ? presentation.remoteCommand(cmd) : false),
+  onInteraction: (event) => (presentation ? presentation.remoteInteraction(event) : { ok: false, error: '当前没有放映' }),
   onChange: () => pushState()
 });
 

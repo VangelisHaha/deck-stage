@@ -320,6 +320,11 @@
     $('remoteOff').hidden = on;
     if (!on) { $('qr').removeAttribute('src'); return; }
     $('qr').src = remoteInfo.qr;
+    $('visitorQr').src = remoteInfo.visitorQr || '';
+    $('visitorQrBox').hidden = !remoteInfo.visitorQr;
+    $('visitorQrLabel').hidden = !remoteInfo.visitorQr;
+    $('visitorUrl').hidden = !remoteInfo.visitorUrl;
+    $('visitorUrl').textContent = remoteInfo.visitorUrl ? '访客地址：' + remoteInfo.visitorUrl : '';
     $('pairCode').textContent = remoteInfo.code.replace(/^(\d{3})(\d{3})$/, '$1 $2');
     $('remoteUrl').textContent = remoteInfo.base;
     const box = $('devices');

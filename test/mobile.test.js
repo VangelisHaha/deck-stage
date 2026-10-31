@@ -53,6 +53,10 @@ test('遥控服务支持配对、状态推送、命令与过期二维码拒绝',
     assert.equal((await request('/api/me')).status, 401);
     assert.equal((await request('/?t=expired')).status, 403);
     assert.equal((await request('/api/pair', { body: { code: 'wrong' } })).status, 403);
+    const visitor = await request('/?v=' + server.visitorToken);
+    assert.equal(visitor.status, 302);
+    const visitorCookie = visitor.headers['set-cookie'][0].split(';')[0];
+    assert.equal((await request('/api/me', { cookie: visitorCookie })).status, 200);
     const paired = await request('/api/pair', { body: { code: server.code } });
     assert.equal(paired.status, 200);
     const cookie = paired.headers['set-cookie'][0].split(';')[0];
@@ -62,6 +66,7 @@ test('遥控服务支持配对、状态推送、命令与过期二维码拒绝',
     assert.match(stream.text, /第一页/);
     await request('/api/cmd', { cookie, body: { cmd: 'next' } });
     assert.deepEqual(commands, [{ cmd: 'next' }]);
+    assert.equal((await request('/api/cmd', { cookie: visitorCookie, body: { cmd: 'next' } })).status, 403);
     const qr = await request('/?t=' + server.token);
     assert.equal(qr.status, 302);
     assert.ok(qr.headers['set-cookie']);

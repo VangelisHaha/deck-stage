@@ -143,7 +143,9 @@
     <div class="remote-body">
       <div class="qr-col">
         <div id="qrBox" class="qr-box"><img id="qr" alt="手机遥控二维码"></div>
-        <div class="mono muted tiny">SCAN</div>
+        <div class="mono muted tiny">手机遥控 · SCAN</div>
+        <div id="visitorQrBox" class="qr-box" hidden><img id="visitorQr" alt="访客视图二维码"></div>
+        <div id="visitorQrLabel" class="mono muted tiny" hidden>访客视图 · SCAN</div>
       </div>
       <div class="info-col">
         <div class="row-head">
@@ -155,6 +157,7 @@
             <span class="label ink">PAIRING CODE</span>
             <div id="pairCode" class="code"></div>
             <div class="row-head"><span id="remoteUrl" class="mono muted tiny"></span><button id="copyUrl" class="link-ink">复制地址</button></div>
+            <div id="visitorUrl" class="mono muted tiny" hidden></div>
           </section>
           <section>
             <div class="row-head"><span class="label ink">已连接设备</span><button id="resetPair" class="link-ink">重置配对</button></div>

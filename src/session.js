@@ -26,6 +26,7 @@ class Presentation {
     this.manual = false;    // 用户手动选过投屏位置后，热插拔不再自动改
     this.blackout = false;
     this.ending = false;
+    this.interactions = { byId: new Map(), recent: [] };
     this.blocker = null;
     this.watcher = null;
     this.watchTimer = null;
@@ -379,7 +380,7 @@ class Presentation {
           cur: window.__cur ? window.__cur() : 0,
           slides: Array.prototype.map.call(S, function(x){
             var k = x.dataset.t || '', n = N[k] || {};
-            return { t: k, sec: n.sec || 0, text: n.text || '' };
+            return { t: k, sec: n.sec || 0, text: n.text || '', interactions: Array.prototype.map.call(x.querySelectorAll('[data-interaction]'), function(el){ return { id: el.getAttribute('data-interaction'), type: el.getAttribute('data-interaction-type') || 'choice', label: el.getAttribute('data-interaction-label') || el.textContent.trim().slice(0, 100), placeholder: el.getAttribute('data-interaction-placeholder') || '' }; }) };
           })
         });
       })()`);
@@ -418,7 +419,8 @@ class Presentation {
       t0: this.t0,
       pageAt: this.pageAt,
       now: Date.now(),
-      blackout: this.blackout
+      blackout: this.blackout,
+      interactions: [...this.interactions.byId.values()].map((x) => ({ id: x.id, type: x.type, count: x.count, options: x.options, results: x.results }))
     };
   }
 
@@ -434,6 +436,23 @@ class Presentation {
     else return false;
     await win.webContents.executeJavaScript(`(function(){ if (window.__go) { ${expr}; } })()`);
     return true;
+  }
+
+  async remoteInteraction({ id, type, payload, sid }) {
+    const allowed = new Set(['poll', 'choice', 'question', 'reaction', 'wordcloud', 'scale']);
+    if (!allowed.has(type) || !/^[a-zA-Z0-9_.:-]{1,80}$/.test(id)) return { ok: false, error: '互动定义不合法' };
+    const now = Date.now();
+    this.interactions.recent = this.interactions.recent.filter((t) => t > now - 10000);
+    if (this.interactions.recent.length >= 20) return { ok: false, error: '提交太频繁，请稍后再试' };
+    this.interactions.recent.push(now);
+    const text = typeof payload === 'string' ? payload.slice(0, 300) : payload;
+    let item = this.interactions.byId.get(id);
+    if (!item) { item = { id, type, count: 0, options: [], results: {} }; this.interactions.byId.set(id, item); }
+    item.count += 1;
+    const key = typeof text === 'string' ? text : JSON.stringify(text || '');
+    item.results[key] = (item.results[key] || 0) + 1;
+    this.onChange();
+    return { ok: true };
   }
 
   // ---------- 结束 ----------

@@ -14,7 +14,10 @@ const { serveFile, send } = require('./server');
 const { lanAddresses, uaLabel } = require('./util');
 
 const ASSET_DIR = path.join(__dirname, 'remote');
-const ASSETS = { '/remote.css': 'remote.css', '/remote.js': 'remote.js' };
+const ASSETS = {
+  '/remote.css': 'remote.css', '/remote.js': 'remote.js',
+  '/visitor.css': 'visitor.css', '/visitor.js': 'visitor.js'
+};
 const PREFERRED_PORT = 18899;
 const COOKIE = 'ds_dev';
 const MAX_FAILS = 5;
@@ -47,12 +50,14 @@ function json(res, code, obj, headers = {}) {
 }
 
 class RemoteServer {
-  constructor({ onCommand, onChange }) {
+  constructor({ onCommand, onInteraction, onChange }) {
     this.onCommand = onCommand;
+    this.onInteraction = onInteraction || (() => ({ ok: false, error: '互动暂不可用' }));
     this.onChange = onChange;
     this.srv = null;
     this.port = 0;
     this.token = '';
+    this.visitorToken = '';
     this.code = '';
     this.devices = new Map(); // sid -> { ua, ip, at }
     this.conns = new Set();   // SSE 连接 { res, sid }
@@ -104,6 +109,7 @@ class RemoteServer {
 
   renew() {
     this.token = rand(16);
+    this.visitorToken = rand(16);
     this.code = code6();
   }
 
@@ -127,7 +133,9 @@ class RemoteServer {
     const urls = lanAddresses().map((ip) => `http://${ip}:${this.port}`);
     const base = urls[0] || `http://127.0.0.1:${this.port}`;
     const link = `${base}/?t=${this.token}`;
+    const visitorLink = `${base}/?v=${this.visitorToken}`;
     const svg = await QRCode.toString(link, { type: 'svg', margin: 1, color: { dark: '#121212', light: '#FAF8F3' } });
+    const visitorSvg = await QRCode.toString(visitorLink, { type: 'svg', margin: 1, color: { dark: '#121212', light: '#FAF8F3' } });
     const online = new Set([...this.conns].map((c) => c.sid));
     return {
       enabled: true,
@@ -135,7 +143,9 @@ class RemoteServer {
       urls,
       code: this.code,
       qr: 'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
-      devices: [...this.devices].map(([id, d]) => ({ id, label: uaLabel(d.ua), ip: d.ip, online: online.has(id) }))
+      visitorQr: 'data:image/svg+xml;utf8,' + encodeURIComponent(visitorSvg),
+      visitorUrl: visitorLink,
+      devices: [...this.devices].map(([id, d]) => ({ id, label: uaLabel(d.ua), ip: d.ip, role: d.role || 'remote', online: online.has(id) }))
     };
   }
 
@@ -161,9 +171,9 @@ class RemoteServer {
     return m && this.devices.has(m[1]) ? m[1] : null;
   }
 
-  newDevice(req) {
+  newDevice(req, role = 'remote') {
     const sid = rand(12);
-    this.devices.set(sid, { ua: req.headers['user-agent'] || '', ip: req.socket.remoteAddress.replace('::ffff:', ''), at: Date.now() });
+    this.devices.set(sid, { ua: req.headers['user-agent'] || '', ip: req.socket.remoteAddress.replace('::ffff:', ''), at: Date.now(), role });
     this.onChange();
     return `${COOKIE}=${sid}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`;
   }
@@ -174,12 +184,15 @@ class RemoteServer {
 
     if (req.method === 'GET' && p === '/') {
       const t = u.searchParams.get('t');
-      if (t) {
-        if (!same(t, this.token)) return send(res, 403, '二维码已失效，请在电脑上重新扫码或输入配对码。', { 'Content-Type': 'text/plain; charset=utf-8' });
-        return send(res, 302, '', { Location: '/', 'Set-Cookie': this.newDevice(req) });
+      const v = u.searchParams.get('v');
+      if (t || v) {
+        const visitor = !!v;
+        if (!same(visitor ? v : t, visitor ? this.visitorToken : this.token)) return send(res, 403, '二维码已失效，请在电脑上重新生成。', { 'Content-Type': 'text/plain; charset=utf-8' });
+        return send(res, 302, '', { Location: visitor ? '/visitor.html' : '/', 'Set-Cookie': this.newDevice(req, visitor ? 'visitor' : 'remote') });
       }
       return serveFile(req, res, path.join(ASSET_DIR, 'index.html'));
     }
+    if (req.method === 'GET' && p === '/visitor.html') return serveFile(req, res, path.join(ASSET_DIR, 'visitor.html'));
     if (req.method === 'GET' && ASSETS[p]) return serveFile(req, res, path.join(ASSET_DIR, ASSETS[p]));
 
     if (req.method === 'GET' && p === '/api/me') return this.sidOf(req) ? json(res, 200, { ok: true }) : json(res, 401, { error: 'auth' });
@@ -214,10 +227,18 @@ class RemoteServer {
     }
 
     if (req.method === 'POST' && p === '/api/cmd') {
+      if (this.devices.get(sid).role === 'visitor') return json(res, 403, { error: 'visitor_readonly' });
       const body = await readJson(req);
       if (!body || typeof body.cmd !== 'string') return json(res, 400, { error: 'bad' });
       const ok = await this.onCommand(body);
       return json(res, 200, { ok: ok !== false });
+    }
+
+    if (req.method === 'POST' && p === '/api/interaction') {
+      const body = await readJson(req);
+      if (!body || typeof body.id !== 'string' || typeof body.type !== 'string') return json(res, 400, { error: 'bad' });
+      const result = await this.onInteraction({ ...body, sid, role: this.devices.get(sid).role });
+      return json(res, result && result.ok === false ? 400 : 200, result || { ok: true });
     }
 
     return send(res, 404, 'Not found');
