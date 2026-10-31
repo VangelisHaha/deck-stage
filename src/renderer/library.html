@@ -100,6 +100,10 @@
     </div>
     <section>
       <div id="savedConns" class="chips" hidden></div>
+      <div id="savedRemoteDirs" class="saved-remote-dirs" hidden>
+        <div class="label ink">已登记的远端目录 · 点一下可复用</div>
+        <div id="remoteDirChips" class="chips"></div>
+      </div>
       <div class="grid2">
         <label>主机地址<input id="rHost" class="field" type="text" placeholder="192.168.1.20 或 dev.example.com" spellcheck="false" autocomplete="off"></label>
         <label>端口<input id="rPort" class="field" type="text" placeholder="22" spellcheck="false" autocomplete="off"></label>
@@ -107,7 +111,7 @@
         <label>密码<input id="rPass" class="field" type="password" placeholder="留空则用密钥登录" autocomplete="off"></label>
         <label class="full">远端目录<input id="rPath" class="field" type="text" placeholder="/data/decks 或 ~/decks" spellcheck="false" autocomplete="off"></label>
       </div>
-      <p class="muted small">连接信息会保存在本机，下次自动出现在稿库里，不用重输。密码加密后落盘（防明文，防不了能读你用户目录的人）。主机写 ~/.ssh/config 里的别名也行，此时用户名、端口、密钥按那份配置走。</p>
+      <p class="muted small">连接信息会保存在本机。以后同一台主机只需要换“远端目录”，不用重复填写 SSH 信息；已登记的目录也可以直接点选复用。密码加密后落盘（防明文，防不了能读你用户目录的人）。主机写 ~/.ssh/config 里的别名也行，此时用户名、端口、密钥按那份配置走。</p>
       <div id="remoteMsg" class="form-msg"></div>
     </section>
     <div class="actions"><button id="submitRemote" class="play small-btn">连接并添加</button></div>

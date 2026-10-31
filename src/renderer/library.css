@@ -103,6 +103,7 @@ footer { height: 84px; flex-shrink: 0; background: var(--ink); color: var(--pape
 .grid2 label.full { grid-column: 1 / -1; }
 .grid2 .field { margin-top: 6px; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.saved-remote-dirs { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--rule); }
 .chip { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px; border: 1px solid var(--ink); background: transparent; font-family: var(--mono); font-size: 12px; color: var(--ink); }
 .chip:hover { background: var(--paper2); }
 .chip .k { color: var(--signal); }

@@ -445,6 +445,7 @@ ipcMain.handle('stage:demo-remove', () => { demo.remove(); toast('示例稿已�
 ipcMain.handle('stage:remove-root', (_e, dir) => { if (demo.isDemoRoot(dir)) { demo.remove(); toast('示例稿已删除'); return; } if (defaults.isDefaultRoot(dir)) { defaults.markRemoved(); pushState(); return; } store.removeRoot(dir); if (ssh.isRemote(dir)) remoteDecks.forget(dir); pushState(); });
 ipcMain.handle('stage:add-remote', (_e, input) => actions.addRemote(input));
 ipcMain.handle('stage:connections', () => connections.list());
+ipcMain.handle('stage:remote-roots', () => store.read().roots.filter(ssh.isRemote).map((dir) => ({ dir, parsed: ssh.parseRemote(dir), label: ssh.label(ssh.parseRemote(dir)) })));
 ipcMain.handle('stage:forget-connection', (_e, id) => { connections.remove(id); });
 ipcMain.handle('stage:refresh-remote', (_e, spec) => { remoteDecks.refreshAll(spec ? [spec] : remoteRoots(store.read().roots)); });
 ipcMain.handle('stage:select', (_e, dir) => { selectedDir = dir; });

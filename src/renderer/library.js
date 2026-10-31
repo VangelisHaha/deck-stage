@@ -425,6 +425,17 @@
       };
       box.appendChild(b);
     }
+    const dirs = await window.stage.remoteRoots();
+    const dirBox = $('remoteDirChips');
+    dirBox.textContent = '';
+    $('savedRemoteDirs').hidden = !dirs.length;
+    for (const d of dirs) {
+      const b = el('button', 'chip'); b.type = 'button';
+      b.textContent = d.label + ' · ' + d.parsed.path;
+      b.title = d.dir;
+      b.onclick = () => { $(rf.host).value = d.parsed.host; $(rf.port).value = d.parsed.port; $(rf.user).value = d.parsed.user; $(rf.path).value = d.parsed.path; $(rf.path).focus(); };
+      dirBox.appendChild(b);
+    }
   }
   function showAddRemote(on) {
     $('addRemote').hidden = !on;
