@@ -400,11 +400,18 @@ function initPresenter(styleEl) {
   const fontDn = btn('A-', '-', () => setFont(font - 1));
   const fontUp = btn('A+', '+', () => setFont(font + 1));
   const helpBtn = btn('帮助', '?', () => toggleHelp());
-  const visitorBtn = btn('访客入口', 'V', () => {
+  const visitorBtn = btn('访客入口 · 0 人', 'V', () => {
     const on = !document.getElementById('stage-visitor-qr')?.classList.contains('on');
     ipcRenderer.send('stage:visitor-qr', on);
   });
   bar.append(tocBtn, layoutBtn, penBtn, clearBtn, helpBtn, visitorBtn, sp, fontDn, fontUp);
+  ipcRenderer.on('stage:remote-status', (_e, data) => {
+    const enabled = !!(data && data.enabled);
+    const n = Number(data && data.visitors) || 0;
+    visitorBtn.firstChild.textContent = enabled ? `访客入口 · ${n} 人` : '访客入口 · 未开启';
+    visitorBtn.disabled = !enabled;
+    visitorBtn.title = enabled ? '显示/隐藏访客二维码（V）' : '请先在稿库打开手机遥控';
+  });
 
   // ---- 操作指引：底部常驻一行提示，? 打开完整快捷键表 ----
   const HINT_IDLE = [['F', '全屏/窗口'], ['D', '换屏'], ['B', '黑屏'], ['P', '回到本窗'], ['G', '目录'], ['V', '访客入口'], ['?', '全部快捷键']];

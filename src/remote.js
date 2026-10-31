@@ -152,7 +152,10 @@ class RemoteServer {
   // 给列表用的轻量摘要，不含二维码
   summary() {
     const online = new Set([...this.conns].map((c) => c.sid));
-    return { enabled: this.enabled, devices: this.devices.size, online: online.size };
+    const devices = [...this.devices].map(([id, d]) => ({ id, role: d.role || 'remote', online: online.has(id) }));
+    return { enabled: this.enabled, devices: this.devices.size, online: online.size,
+      visitors: devices.filter((d) => d.role === 'visitor' && d.online).length,
+      remotes: devices.filter((d) => d.role === 'remote' && d.online).length };
   }
 
   broadcast(state) {

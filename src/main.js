@@ -48,7 +48,7 @@ const previews = new Previews({
 const remote = new RemoteServer({
   onCommand: (cmd) => (presentation ? presentation.remoteCommand(cmd) : false),
   onInteraction: (event) => (presentation ? presentation.remoteInteraction(event) : { ok: false, error: '当前没有放映' }),
-  onChange: () => pushState()
+  onChange: () => { pushState(); if (presentation) presentation.setRemoteStatus(remote.summary()); remoteBroadcast(); }
 });
 
 function remoteBroadcast() {

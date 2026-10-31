@@ -401,7 +401,7 @@ class Presentation {
           cur: window.__cur ? window.__cur() : 0,
           slides: Array.prototype.map.call(S, function(x){
             var k = x.dataset.t || '', n = N[k] || {};
-            return { t: k, sec: n.sec || 0, text: n.text || '', interactions: Array.prototype.map.call(x.querySelectorAll('[data-interaction]'), function(el){ return { id: el.getAttribute('data-interaction'), type: el.getAttribute('data-interaction-type') || 'choice', label: el.getAttribute('data-interaction-label') || el.textContent.trim().slice(0, 100), placeholder: el.getAttribute('data-interaction-placeholder') || '' }; }) };
+            return { t: k, sec: n.sec || 0, text: n.text || '', interactions: Array.prototype.map.call(x.querySelectorAll('[data-interaction]'), function(el){ return { id: el.getAttribute('data-interaction'), type: el.getAttribute('data-interaction-type') || 'choice', label: el.getAttribute('data-interaction-label') || el.textContent.trim().slice(0, 100), placeholder: el.getAttribute('data-interaction-placeholder') || '', options: (el.getAttribute('data-interaction-options') || '').split('|').map(function(v){ return v.trim(); }).filter(Boolean), min: Number(el.getAttribute('data-interaction-min') || 1), max: Number(el.getAttribute('data-interaction-max') || 5) }; }) };
           })
         });
       })()`);
@@ -441,6 +441,7 @@ class Presentation {
       pageAt: this.pageAt,
       now: Date.now(),
       blackout: this.blackout,
+      visitors: this.remoteVisitors || 0,
       interactions: [...this.interactions.byId.values()].map((x) => ({ id: x.id, type: x.type, count: x.count, options: x.options, results: x.results }))
     };
   }
@@ -457,6 +458,14 @@ class Presentation {
     else return false;
     await win.webContents.executeJavaScript(`(function(){ if (window.__go) { ${expr}; } })()`);
     return true;
+  }
+
+  setRemoteStatus({ enabled = false, visitors = 0 } = {}) {
+    this.remoteVisitors = Number(visitors) || 0;
+    this.remoteEnabled = !!enabled;
+    if (this.presenter && !this.presenter.isDestroyed()) {
+      this.presenter.webContents.send('stage:remote-status', { enabled: this.remoteEnabled, visitors: this.remoteVisitors });
+    }
   }
 
   async remoteInteraction({ id, type, payload, sid }) {
