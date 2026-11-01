@@ -25,6 +25,8 @@ html.stage-fs #stage-drag { display: none; }
 #stage-remote-qr.on { display: flex; }
 #stage-remote-qr .qr-card { width: min(420px, 80vw); padding: 28px; background: #F1EEE6; color: #0F0F0E; text-align: center; }
 #stage-remote-qr img { width: 260px; height: 260px; display: block; margin: 18px auto; background: #FAF8F3; }
+#stage-remote-qr .qr-title { font: 700 22px Georgia, serif; }
+#stage-remote-qr .qr-hint { font: 12px "SF Mono", monospace; color: #666; line-height: 1.6; }
 /* App chrome must win over any deck theme: never let a稿子的 button/reset rule hide the end control. */
 #pv .pvtop .stage-end, body > .stage-end { position: fixed !important; top: 10px !important; right: 10px !important; z-index: 2147483647 !important; display: inline-flex !important; visibility: visible !important; opacity: 1 !important; align-items: center !important; justify-content: center !important; margin: 0 !important; height: 34px !important; min-width: 92px !important; padding: 0 14px !important; border: 1px solid #F1EEE6 !important; border-radius: 4px !important; background: #0F0F0E !important; color: #F1EEE6 !important; font: 12px "SF Mono", ui-monospace, Menlo, monospace !important; letter-spacing: 1px !important; line-height: 1 !important; cursor: pointer !important; white-space: nowrap !important; pointer-events: auto !important; }
 #pv .pvtop .stage-end.confirm, body > .stage-end.confirm { background: #FF4F1F !important; border-color: #FF4F1F !important; color: #121212 !important; }
@@ -32,6 +34,15 @@ html.stage-fs #stage-drag { display: none; }
 .stage-end.float { position: fixed !important; top: 10px !important; right: 10px !important; z-index: 2147483647 !important; }
 `;
 const IDLE_MS = 2000;
+
+// 二维码浮层（手机控制 / 访客入口共用），样式在 CSS 里按 id 固定，不受稿子主题影响
+function addQrLayer(id, title, hint) {
+  const layer = document.createElement('div');
+  layer.id = id;
+  layer.innerHTML = `<div class="qr-card"><div class="qr-title">${title}</div><img alt="${title}二维码"><div class="qr-hint">${hint}</div></div>`;
+  document.body.appendChild(layer);
+  return layer;
+}
 
 // 演讲者窗口的「结束放映」：点一次变橙色要求确认，3 秒内再点才真正结束，防止讲到一半误触
 function addEndButton() {
@@ -230,6 +241,7 @@ const FONT_MAX = 40;
 
 const PV_CSS = `
 #pv .pvmain { display: none !important; }
+#pv .pvtop { padding-right: 124px !important; }
 #ps-main { flex: 1; min-height: 0; display: flex; }
 #ps-left { flex: 0 0 calc(var(--ps-split, 62) * 1%); min-width: 0; display: flex; flex-direction: column; }
 #ps-area { flex: 1; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; padding: 12px 6px 8px 14px; }
@@ -254,6 +266,8 @@ const PV_CSS = `
 #ps-bar button { height: 28px; padding: 0 11px; border: 1px solid var(--line2, #333); background: transparent; color: var(--ink3, #aaa); font: 12px "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .04em; cursor: pointer; white-space: nowrap; }
 #ps-bar button:hover { color: var(--ink, #eee); border-color: var(--ink3, #aaa); }
 #ps-bar button.on { color: #121212; background: #FF4F1F; border-color: #FF4F1F; }
+#ps-bar button:disabled { opacity: .4; cursor: default; }
+#ps-bar button:disabled:hover { color: var(--ink3, #aaa); border-color: var(--line2, #333); }
 #ps-hint { flex: none; padding: 0 8px 10px 14px; font: 12px/1.7 "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .03em; color: var(--ink4, #888); }
 #ps-hint b { color: var(--ink2, #ccc); font-weight: 600; }
 #ps-hint.toc { color: #FF4F1F; }
@@ -404,28 +418,46 @@ function initPresenter(styleEl) {
   const fontDn = btn('A-', '-', () => setFont(font - 1));
   const fontUp = btn('A+', '+', () => setFont(font + 1));
   const helpBtn = btn('帮助', '?', () => toggleHelp());
-  const remoteBtn = btn('手机控制 · 未开启', 'R', () => {
-    const on = !document.getElementById('stage-remote-qr')?.classList.contains('on');
+  // 二维码开关：手机控制显示在本窗口，访客二维码显示在观众窗口，开关状态都记在这里
+  const remoteQr = addQrLayer('stage-remote-qr', '手机控制', '扫码后可翻页、跳页、黑屏和调整台词字号<br>按 R 或再次点击“手机控制”即可收起');
+  let visitorQrOn = false;
+  const toggleRemoteQr = (force) => {
+    if (remoteBtn.disabled) { say('请先在稿库打开手机遥控'); return; }
+    const on = typeof force === 'boolean' ? force : !remoteQr.classList.contains('on');
     ipcRenderer.send('stage:remote-qr', on);
-  });
-  const visitorBtn = btn('访客入口 · 0 人', 'V', () => {
-    const on = !document.getElementById('stage-visitor-qr')?.classList.contains('on');
-    ipcRenderer.send('stage:visitor-qr', on);
-  });
+  };
+  const toggleVisitorQr = (force) => {
+    if (visitorBtn.disabled) { say('请先在稿库打开手机遥控'); return; }
+    visitorQrOn = typeof force === 'boolean' ? force : !visitorQrOn;
+    visitorBtn.classList.toggle('on', visitorQrOn);
+    ipcRenderer.send('stage:visitor-qr', visitorQrOn);
+  };
+  const remoteBtn = btn('手机控制 · 未开启', 'R', () => toggleRemoteQr());
+  const visitorBtn = btn('访客入口 · 未开启', 'V', () => toggleVisitorQr());
+  remoteBtn.disabled = true;
+  visitorBtn.disabled = true;
   bar.append(tocBtn, layoutBtn, penBtn, clearBtn, helpBtn, remoteBtn, visitorBtn, sp, fontDn, fontUp);
   ipcRenderer.on('stage:remote-qr', (_e, data) => {
-    const on = data && typeof data === 'object' ? data.on : data;
-    const box = document.getElementById('stage-remote-qr');
-    if (data && data.qr) box.querySelector('img').src = data.qr;
-    box.classList.toggle('on', !!on);
+    const on = !!(data && typeof data === 'object' ? data.on : data);
+    if (data && data.qr) remoteQr.querySelector('img').src = data.qr;
+    remoteQr.classList.toggle('on', on);
+    remoteBtn.classList.toggle('on', on);
   });
   ipcRenderer.on('stage:remote-status', (_e, data) => {
     const enabled = !!(data && data.enabled);
     const n = Number(data && data.visitors) || 0;
+    remoteBtn.firstChild.textContent = enabled ? '手机控制 · 已开启' : '手机控制 · 未开启';
+    remoteBtn.disabled = !enabled;
+    remoteBtn.title = enabled ? '显示/隐藏手机控制二维码（R）' : '请先在稿库打开手机遥控';
     visitorBtn.firstChild.textContent = enabled ? `访客入口 · ${n} 人` : '访客入口 · 未开启';
     visitorBtn.disabled = !enabled;
     visitorBtn.title = enabled ? '显示/隐藏访客二维码（V）' : '请先在稿库打开手机遥控';
+    if (!enabled) { // 遥控关掉后两个二维码都已失效，一并收起
+      if (remoteQr.classList.contains('on')) toggleRemoteQr(false);
+      if (visitorQrOn) { visitorQrOn = false; visitorBtn.classList.remove('on'); ipcRenderer.send('stage:visitor-qr', false); }
+    }
   });
+  ipcRenderer.send('stage:remote-status-get');
 
   // ---- 操作指引：底部常驻一行提示，? 打开完整快捷键表 ----
   const HINT_IDLE = [['F', '全屏/窗口'], ['D', '换屏'], ['B', '黑屏'], ['P', '回到本窗'], ['G', '目录'], ['R', '手机控制'], ['V', '访客入口'], ['?', '全部快捷键']];
@@ -717,6 +749,8 @@ function initPresenter(styleEl) {
       case 'l': eat(e); cycleLayout(); break;
       case 'e': eat(e); togglePen(); break;
       case 'c': eat(e); clearInk(); say('已清除笔迹'); break;
+      case 'r': eat(e); toggleRemoteQr(); break;
+      case 'v': eat(e); toggleVisitorQr(); break;
       case '+': case '=': eat(e); setFont(font + 1); break;
       case '-': case '_': eat(e); setFont(font - 1); break;
       default: break;
@@ -872,21 +906,7 @@ window.addEventListener('DOMContentLoaded', () => {
   black.id = 'stage-black';
   document.body.appendChild(black);
 
-  const remoteQr = document.createElement('div');
-  remoteQr.id = 'stage-remote-qr';
-  remoteQr.innerHTML = '<div class="qr-card"><div class="qr-title">手机控制</div><img alt="手机控制二维码"><div class="qr-hint">扫码后可翻页、跳页、黑屏和调整台词字号<br>按 R 或再次点击“手机控制”即可收起</div></div>';
-  document.body.appendChild(remoteQr);
-  ipcRenderer.on('stage:remote-status', (_e, data) => {
-    const enabled = !!(data && data.enabled);
-    remoteBtn.firstChild.textContent = enabled ? '手机控制 · 已开启' : '手机控制 · 未开启';
-    remoteBtn.disabled = !enabled;
-    remoteBtn.title = enabled ? '显示/隐藏手机控制二维码（R）' : '请先在稿库打开手机遥控';
-  });
-
-  const visitorQr = document.createElement('div');
-  visitorQr.id = 'stage-visitor-qr';
-  visitorQr.innerHTML = '<div class="qr-card"><div class="qr-title">手机 / 电脑扫码查看</div><img alt="访客视图二维码"><div class="qr-hint">打开后会跟随当前演示同步，也可以参与页面互动<br>再次点击“访客入口”即可收起</div></div>';
-  document.body.appendChild(visitorQr);
+  const visitorQr = addQrLayer('stage-visitor-qr', '手机 / 电脑扫码查看', '打开后会跟随当前演示同步，也可以参与页面互动<br>再次点击“访客入口”即可收起');
   ipcRenderer.on('stage:visitor-qr', (_e, data) => {
     const on = data && typeof data === 'object' ? data.on : data;
     if (data && data.qr) visitorQr.querySelector('img').src = data.qr;

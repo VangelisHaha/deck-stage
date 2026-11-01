@@ -9,6 +9,7 @@
   let selected = null;
   let remoteInfo = { enabled: false, devices: [] };
   let playPointer = null;
+  let pointerExpanded = false; // 放映前光标列表：默认一行，点「展开全部」看全部
   let previewOn = true;
   try { previewOn = localStorage.getItem('deckstage.preview') !== 'off'; } catch (e) { /* 没有就默认开 */ }
   const pv = { dir: null, data: null, focus: 0, timer: 0, suspended: false };
@@ -174,6 +175,9 @@
     $('pointerDeck').textContent = deck ? deck.title : '';
     const styles = $('pointerStyles');
     styles.textContent = '';
+    styles.classList.toggle('all', pointerExpanded);
+    $('pointerMore').hidden = state.pointer.styles.length <= 4;
+    $('pointerMore').textContent = pointerExpanded ? '收起' : `展开全部 ${state.pointer.styles.length}`;
     for (const style of state.pointer.styles) {
       const b = el('button', 'pointer-choice' + (style.id === playPointer.style ? ' on' : ''));
       b.type = 'button';
@@ -203,6 +207,7 @@
     syncPreview();
     if (!on) return;
     playPointer = Object.assign({}, state.pointer.value);
+    pointerExpanded = false;
     loadPlayTargets().then(renderPointerSetup);
     renderPointerSetup();
   }
@@ -481,6 +486,7 @@
   $('copyPrompt').onclick = async (e) => { await window.stage.copy(state.skills.prompt); flash(e.target, '已复制'); };
   $('play').onclick = () => { if (selected) showPlaySetup(true); };
   $('closePlaySetup').onclick = () => showPlaySetup(false);
+  $('pointerMore').onclick = () => { pointerExpanded = !pointerExpanded; renderPointerSetup(); };
   $('playSetup').addEventListener('click', (e) => { if (e.target === $('playSetup')) showPlaySetup(false); });
   $('confirmPlay').onclick = confirmPlay;
   $('reveal').onclick = () => { if (selected) window.stage.reveal(selected); };

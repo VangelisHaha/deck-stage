@@ -471,6 +471,10 @@ ipcMain.on('stage:remote-qr', async (e, on) => {
   if (!presentation || !presentation.presenter || e.sender !== presentation.presenter.webContents) return;
   presentation.toggleRemoteQr(on, on ? await remote.info() : null);
 });
+// 演讲者窗口载入后主动要一次遥控状态（放映开始时窗口还没加载完，onChange 推的那次会丢）
+ipcMain.on('stage:remote-status-get', (e) => {
+  if (presentation && presentation.presenter && e.sender === presentation.presenter.webContents) presentation.setRemoteStatus(remote.summary());
+});
 ipcMain.handle('stage:copy', (_e, text) => { clipboard.writeText(String(text)); });
 
 // ---------- 生命周期 ----------

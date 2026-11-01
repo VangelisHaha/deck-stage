@@ -140,7 +140,11 @@ footer { height: 84px; flex-shrink: 0; background: var(--ink); color: var(--pape
 .pointer-sheet { width: 880px; max-height: calc(100vh - 56px); overflow-y: auto; }
 .pointer-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; font-family: var(--serif); font-weight: 900; font-size: 18px; }
 .pointer-heading .mono, .pointer-heading .muted { font-family: var(--mono); font-weight: 400; font-size: 11px; letter-spacing: .04em; }
-.pointer-styles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 14px; }
+/* 默认一行四个，横向滑动看其余；「展开全部」后换成多行网格 */
+.pointer-styles { display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 30px) / 4); gap: 10px; margin-top: 14px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: thin; padding-bottom: 6px; }
+.pointer-styles > .pointer-choice { scroll-snap-align: start; }
+.pointer-styles.all { grid-auto-flow: row; grid-template-columns: repeat(4, 1fr); grid-auto-columns: auto; overflow-x: visible; }
+.pointer-more { margin-left: 14px; font-family: var(--mono); font-size: 11px; font-weight: 400; }
 .pointer-choice { min-width: 0; height: 132px; padding: 12px 10px 10px; border: 1px solid var(--rule); background: #E9E5DB; color: var(--ink); text-align: left; position: relative; }
 .pointer-choice:hover { border-color: var(--ink); }
 .pointer-choice.on { border: 2px solid var(--ink); padding: 11px 9px 9px; background: var(--paper); box-shadow: inset 0 -5px 0 var(--signal); }
