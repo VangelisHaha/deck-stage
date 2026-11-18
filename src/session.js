@@ -28,6 +28,36 @@ function ensureStageSyncPreload() {
   }
 }
 
+// 计算放映前与默认开播的屏幕分配：双屏默认观众去外接屏、演讲者留主屏；单屏默认观众用窗口模式（方便会议共享窗口）。
+// 若用户在同一屏幕数量下手动保存过偏好且目标屏幕仍在，沿用用户选择；热插拔外接屏导致屏幕数变化时自动回退智能默认。
+function computePlayTargets(displays, primary, saved = null) {
+  const validIds = new Set(displays.map((d) => String(d.id)));
+  const external = displays.find((d) => d.id !== primary.id);
+  let audience = external ? String(external.id) : 'window';
+  let presenter = String(primary.id);
+
+  if (saved && typeof saved === 'object' && saved.screens === displays.length) {
+    if (saved.audience === 'window' || validIds.has(String(saved.audience))) audience = String(saved.audience);
+    if (saved.presenter === 'window' || validIds.has(String(saved.presenter))) presenter = String(saved.presenter);
+  }
+
+  const list = displays.map((d, i) => ({
+    id: String(d.id),
+    mode: 'screen',
+    displayId: d.id,
+    label: `屏幕 ${i + 1} · ${d.label || (d.id === primary.id ? '内置显示器' : '外接显示器')} ${d.size.width}×${d.size.height}`,
+    checked: audience === String(d.id)
+  })).concat([{
+    id: 'window',
+    mode: 'window',
+    displayId: primary.id,
+    label: '窗口模式（共享窗口用）',
+    checked: audience === 'window'
+  }]);
+
+  return { list, audience, presenter, screens: displays.length };
+}
+
 class Presentation {
   constructor(root, { onEnd, onChange, onLiveEvent, getPointer, confirmServices, resync }) {
     this.root = root;
@@ -74,12 +104,17 @@ class Presentation {
     this.pageAt = Date.now();
   }
 
-  async start(hotReload, layoutTargets = null) {
+  async start(hotReload, layoutTargets = null, startSlide = 0) {
     ensureStageSyncPreload();
     await this.services.start(); // 稿子自带的后台服务（deckstage.json），先于窗口启动，页面一进来就能连上
     this.server = await startServer(this.root, stablePort(this.root));
     await session.defaultSession.clearCache();
     this.blocker = powerSaveBlocker.start('prevent-display-sleep');
+
+    const pageIdx = Number.isInteger(startSlide) && startSlide > 0 ? startSlide : 0;
+    const hash = pageIdx > 0 ? `#p${pageIdx + 1}` : '';
+    this.cur = pageIdx;
+    if (pageIdx > 0) this.t0 = Date.now();
 
     this.target = this.defaultTarget();
     if (layoutTargets && layoutTargets.audience) {
@@ -91,8 +126,8 @@ class Presentation {
     }
     this.presenterTarget = layoutTargets && layoutTargets.presenter && layoutTargets.presenter !== 'window'
       ? this.displayById(layoutTargets.presenter) : null;
-    this.audience = this.makeWindow('audience', `${this.server.origin}/index.html`);
-    this.presenter = this.makeWindow('presenter', `${this.server.origin}/index.html?notes=1`);
+    this.audience = this.makeWindow('audience', `${this.server.origin}/index.html${hash}`);
+    this.presenter = this.makeWindow('presenter', `${this.server.origin}/index.html?notes=1${hash}`);
     this.audience.on('closed', () => this.end());
     this.presenter.on('closed', () => {
       this.presenter = null;
@@ -432,6 +467,13 @@ class Presentation {
     if (this.onLiveEvent) this.onLiveEvent('pointer', msg);
   }
 
+  // 放映中实时切换投屏光标样式或大小：同步通知观众窗口与演讲者窗口
+  updatePointer(catalog) {
+    for (const win of [this.audience, this.presenter]) {
+      if (win && !win.isDestroyed()) win.webContents.send('stage:pointer-config', catalog);
+    }
+  }
+
   normalizeVisitorQrMode(modeOrOn) {
     if (modeOrOn === 'full' || modeOrOn === 'corner' || modeOrOn === 'off') return modeOrOn;
     return modeOrOn ? 'full' : 'off';
@@ -646,4 +688,4 @@ class Presentation {
   }
 }
 
-module.exports = { Presentation };
+module.exports = { Presentation, computePlayTargets };

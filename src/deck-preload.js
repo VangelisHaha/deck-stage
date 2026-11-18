@@ -83,6 +83,9 @@ function initAudienceInk() {
     if (m.k === 'm') hover.move(m.x, m.y);
     else if (m.k === 'l') hover.clear();
   });
+  ipcRenderer.on('stage:pointer-config', (_e, catalog) => {
+    if (catalog) ink.setPointer(catalog);
+  });
 }
 
 function initAudienceIframeReplay() {
@@ -161,6 +164,19 @@ const PV_CSS = `
 #ps-help dl { margin: 0; padding: 0 14px 8px; display: grid; grid-template-columns: 150px 1fr; row-gap: 5px; }
 #ps-help dt { font: 12px "SF Mono", ui-monospace, Menlo, monospace; color: var(--ink, #eee); }
 #ps-help dd { margin: 0; font-size: 13px; color: var(--ink3, #aaa); }
+#ps-ptr { position: absolute; z-index: 125; left: 14px; bottom: 10px; width: min(500px, calc(100% - 24px)); display: none; background: #0F0F0E; border: 1px solid var(--line2, #333); box-shadow: 0 12px 40px rgba(0,0,0,.65); padding-bottom: 12px; }
+#ps-ptr.on { display: block; }
+#ps-ptr .hd { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line2, #333); font: 11px "SF Mono", ui-monospace, Menlo, monospace; letter-spacing: .08em; color: var(--ink4, #888); }
+#ps-ptr .hd button { border: 0; background: transparent; color: var(--ink3, #aaa); font-size: 13px; cursor: pointer; }
+#ps-ptr .ptr-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; padding: 10px 12px 8px; }
+#ps-ptr .ptr-item { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 4px; border: 1px solid var(--line2, #333); background: rgba(255,255,255,.03); color: var(--ink2, #ccc); font-size: 11px; cursor: pointer; }
+#ps-ptr .ptr-item:hover { border-color: var(--ink3, #aaa); color: #fff; }
+#ps-ptr .ptr-item.on { border-color: #FF4F1F; background: rgba(255,79,31,.15); color: #fff; }
+#ps-ptr .ptr-item img { width: 32px; height: 32px; display: block; }
+#ps-ptr .ptr-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+#ps-ptr .ptr-sizes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 0 12px; }
+#ps-ptr .ptr-sz { height: 28px; border: 1px solid var(--line2, #333); background: transparent; color: var(--ink3, #aaa); font: 12px "SF Mono", ui-monospace, Menlo, monospace; cursor: pointer; }
+#ps-ptr .ptr-sz.on { background: #FF4F1F; border-color: #FF4F1F; color: #121212; font-weight: 700; }
 #ps-toc .tip { flex: none; margin: -2px 10px 8px; font: 11px/1.6 "SF Mono", ui-monospace, Menlo, monospace; color: var(--ink4, #888); }
 #ps-bar kbd { opacity: .55; margin-left: 5px; font: inherit; }
 #ps-bar .sp { flex: 1; }
@@ -225,6 +241,7 @@ function initPresenter(styleEl) {
   const bar = el('div', 'ps-bar');
   const hint = el('div', 'ps-hint');
   const help = el('div', 'ps-help');
+  const ptrBox = el('div', 'ps-ptr');
   const splitter = el('div', 'ps-split');
   const right = el('div', 'ps-right');
   const ixBox = el('div', 'ps-ix');
@@ -243,7 +260,7 @@ function initPresenter(styleEl) {
   const nextNb = mkNb();
   next.append(prevNb.nb, nextNb.nb);
   box.appendChild(inkCanvas);
-  area.append(box, toc, help, hud);
+  area.append(box, toc, ptrBox, help, hud);
   left.append(area, bar, hint);
   right.append(body, ixBox, next);
   main.append(left, splitter, right);
@@ -303,6 +320,7 @@ function initPresenter(styleEl) {
   };
   const tocBtn = btn('目录', 'G', () => toggleToc());
   const layoutBtn = btn('', 'L', () => cycleLayout());
+  const ptrBtn = btn('光标', 'K', () => togglePtr());
   const penBtn = btn('画笔', 'E', () => togglePen());
   const clearBtn = btn('清除', 'C', () => clearInk());
   const sp = el('div', null, 'sp');
@@ -353,7 +371,7 @@ function initPresenter(styleEl) {
 
   const remoteBtn = btn('手机控制', 'R', () => toggleRemoteQr());
   const visitorBtn = btn('访客入口', 'V', () => cycleVisitorQr());
-  bar.append(tocBtn, layoutBtn, penBtn, clearBtn, helpBtn, remoteBtn, visitorBtn, sp, fontDn, fontUp);
+  bar.append(tocBtn, layoutBtn, ptrBtn, penBtn, clearBtn, helpBtn, remoteBtn, visitorBtn, sp, fontDn, fontUp);
 
   // ---- 现场互动结果面板（仅在当前页声明了 data-interaction 时显示） ----
   const renderInteractions = () => {
@@ -428,7 +446,7 @@ function initPresenter(styleEl) {
   ipcRenderer.send('stage:remote-status-get');
 
   // ---- 操作指引 ----
-  const HINT_IDLE = [['F', '全屏/窗口'], ['D', '换屏'], ['B', '黑屏'], ['P', '回到本窗'], ['G', '目录'], ['R', '手机控制'], ['V', '访客二维码'], ['?', '全部快捷键']];
+  const HINT_IDLE = [['F', '全屏/窗口'], ['D', '换屏'], ['B', '黑屏'], ['P', '回到本窗'], ['G', '目录'], ['K', '光标'], ['R', '手机控制'], ['V', '访客二维码'], ['?', '全部快捷键']];
   let tocOpen = false;
   let subframeTyping = false;
 
@@ -451,7 +469,7 @@ function initPresenter(styleEl) {
   };
   const HELP = [
     ['放映（观众屏幕）', [['F', '观众窗口 全屏 / 窗口模式'], ['D', '观众窗口换到下一块屏幕'], ['B', '黑屏，再按恢复'], ['P', '回到演讲者窗口'], ['← →  空格', '翻页'], ['Esc', '退出输入焦点 / 退出全屏；窗口模式连按两次结束放映']]],
-    ['演讲者窗口', [['G', '打开目录（搜页码 / 标题 / 拼音首字母）；Esc 收起'], ['数字 + 回车', '直接跳到第几页'], ['L', '切换布局：均衡 / 画面优先 / 台词优先'], ['+  -', '台词字号'], ['鼠标移入当前页', '观众屏与访客端同步显示光标（含内嵌网页）'], ['Shift + 拖动', '在画面上划线（内嵌网页上也可直接划）'], ['E', '画笔常开 / 关闭'], ['C', '清除笔迹（翻页也会清）'], ['R', '显示/隐藏手机控制二维码（自动开启）'], ['V', '切换访客二维码：全屏大图 → 右下角角标 → 关闭'], ['?', '打开本说明；Esc 或 ✕ 关闭']]]
+    ['演讲者窗口', [['G', '打开目录（搜页码 / 标题 / 拼音首字母）；Esc 收起'], ['数字 + 回车', '直接跳到第几页'], ['L', '切换布局：均衡 / 画面优先 / 台词优先'], ['+  -', '台词字号'], ['K', '实时切换投屏光标样式与大小'], ['鼠标移入当前页', '观众屏与访客端同步显示光标（含内嵌网页）'], ['Shift + 拖动', '在画面上划线（内嵌网页上也可直接划）'], ['E', '画笔常开 / 关闭'], ['C', '清除笔迹（翻页也会清）'], ['R', '显示/隐藏手机控制二维码（自动开启）'], ['V', '切换访客二维码：全屏大图 → 右下角角标 → 关闭'], ['?', '打开本说明；Esc 或 ✕ 关闭']]]
   ];
   const buildHelp = () => {
     const hd = el('div', null, 'hd');
@@ -472,8 +490,12 @@ function initPresenter(styleEl) {
     help.classList.toggle('on', on);
     syncOverlay();
   }
-  function syncOverlay() { ipcRenderer.send('stage:overlay', tocOpen || help.classList.contains('on')); }
-  ipcRenderer.on('stage:close-overlay', () => { if (help.classList.contains('on')) toggleHelp(false); else if (tocOpen) toggleToc(false); });
+  function syncOverlay() { ipcRenderer.send('stage:overlay', tocOpen || help.classList.contains('on') || ptrBox.classList.contains('on')); }
+  ipcRenderer.on('stage:close-overlay', () => {
+    if (help.classList.contains('on')) toggleHelp(false);
+    else if (ptrBox.classList.contains('on')) togglePtr(false);
+    else if (tocOpen) toggleToc(false);
+  });
   buildHelp();
 
   function cycleLayout() {
@@ -622,7 +644,66 @@ function initPresenter(styleEl) {
   };
 
   // ---- 光点、划线与内嵌网页（iframe）同步 ----
-  const ink = Sync.makeInk(inkCanvas, () => inkCanvas.getBoundingClientRect(), POINTER_DATA);
+  let pointerCatalog = Object.assign({ value: { style: 'mac', size: 'small' } }, POINTER_DATA);
+  const ink = Sync.makeInk(inkCanvas, () => inkCanvas.getBoundingClientRect(), pointerCatalog);
+  const renderPtrBox = () => {
+    const styles = pointerCatalog.styles || [];
+    const sizes = pointerCatalog.sizes || [];
+    const curVal = pointerCatalog.value || { style: 'mac', size: 'small' };
+    ptrBox.textContent = '';
+    const hd = el('div', null, 'hd');
+    const title = el('span');
+    title.textContent = '投屏光标 · 实时切换（Esc 收起）';
+    const close = el('button');
+    close.type = 'button';
+    close.textContent = '✕';
+    close.onclick = () => togglePtr(false);
+    hd.append(title, close);
+    const grid = el('div', null, 'ptr-grid');
+    styles.forEach((st) => {
+      const b = el('button', null, 'ptr-item' + (st.id === curVal.style ? ' on' : ''));
+      b.type = 'button';
+      const im = el('img');
+      im.alt = '';
+      im.src = (st.previews && (st.previews[curVal.size] || st.previews.small)) || '';
+      const nm = el('span');
+      nm.textContent = st.name;
+      b.append(im, nm);
+      b.onclick = () => selectPointer({ style: st.id, size: curVal.size });
+      grid.appendChild(b);
+    });
+    const szWrap = el('div', null, 'ptr-sizes');
+    sizes.forEach((sz) => {
+      const b = el('button', null, 'ptr-sz' + (sz.id === curVal.size ? ' on' : ''));
+      b.type = 'button';
+      b.textContent = `${sz.name}号 · ${sz.px}px`;
+      b.onclick = () => selectPointer({ style: curVal.style, size: sz.id });
+      szWrap.appendChild(b);
+    });
+    ptrBox.append(hd, grid, szWrap);
+  };
+  const selectPointer = (nextVal) => {
+    pointerCatalog = Object.assign({}, pointerCatalog, { value: nextVal });
+    ink.setPointer(pointerCatalog);
+    renderPtrBox();
+    ipcRenderer.invoke('stage:pointer-set', nextVal);
+    const st = (pointerCatalog.styles || []).find((x) => x.id === nextVal.style);
+    const sz = (pointerCatalog.sizes || []).find((x) => x.id === nextVal.size);
+    say(`光标：${st ? st.name : nextVal.style}${sz ? ' · ' + sz.name + '号' : ''}`);
+  };
+  function togglePtr(force) {
+    const on = force == null ? !ptrBox.classList.contains('on') : !!force;
+    if (on) renderPtrBox();
+    ptrBox.classList.toggle('on', on);
+    ptrBtn.classList.toggle('on', on);
+    syncOverlay();
+  }
+  ipcRenderer.on('stage:pointer-config', (_e, catalog) => {
+    if (!catalog) return;
+    pointerCatalog = catalog;
+    ink.setPointer(pointerCatalog);
+    if (ptrBox.classList.contains('on')) renderPtrBox();
+  });
   const emit = (m) => { ink.apply(m); ipcRenderer.send('stage:pointer', m); };
   const emitRemote = (m) => ipcRenderer.send('stage:pointer', m);
   let pen = false;
@@ -695,6 +776,19 @@ function initPresenter(styleEl) {
     } else if (d.op === 'typing') {
       subframeTyping = !!d.on;
       syncTyping();
+    } else if (d.op === 'refocus') {
+      subframeTyping = false;
+      syncTyping();
+      if (frames[fi].blur) frames[fi].blur();
+      window.focus();
+      say('已退回舞台焦点');
+    } else if (d.op === 'nav-key') {
+      subframeTyping = false;
+      syncTyping();
+      if (frames[fi].blur) frames[fi].blur();
+      window.focus();
+      const nextIdx = curIndex() + (d.dir > 0 ? 1 : -1);
+      if (nextIdx >= 0 && nextIdx < slideEls().length) goTo(nextIdx);
     } else if (d.op === 'click' || d.op === 'dblclick' || d.op === 'scroll' || d.op === 'input' || d.op === 'url') {
       const payload = Object.assign({}, d, { fi });
       delete payload.__dsFrame;
@@ -769,6 +863,7 @@ function initPresenter(styleEl) {
     switch (k) {
       case 'g': eat(e); toggleToc(); break;
       case 'l': eat(e); cycleLayout(); break;
+      case 'k': eat(e); togglePtr(); break;
       case 'e': eat(e); togglePen(); break;
       case 'c': eat(e); clearInk(); say('已清除笔迹'); break;
       case 'r': eat(e); toggleRemoteQr(); break;

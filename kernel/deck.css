@@ -212,7 +212,11 @@ body:not(.exporting) .slide[data-t].on [data-type] .ch:not(.in){opacity:0;}
 #pv .pvttl{flex:1;min-width:0;font-size:20px;font-weight:700;color:var(--ink);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 #pv .pvclock{flex:none;display:flex;gap:12px;align-items:baseline;font-family:var(--mono);}
-#pv .pvtot{font-size:23px;font-weight:700;color:var(--ink2);cursor:pointer;}
+#pv .pvtot{font-size:23px;font-weight:700;color:var(--ink2);cursor:pointer;user-select:none;}
+#pv .pvtot .pvbudget{font-size:13px;font-weight:400;color:var(--ink4);}
+#pv .pvtot.paused{color:var(--accent2);}
+#pv .pvtot.warn{color:var(--accent2);}
+#pv .pvtot.over{color:#FF6FB5;}
 #pv .pvpg{font-size:14px;color:var(--ink4);}
 #pv .pvpg.warn{color:var(--accent2);}
 #pv .pvpg.over{color:#FF6FB5;font-weight:700;}

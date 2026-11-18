@@ -115,16 +115,57 @@ function loginShellEnv() {
   return shellEnvPromise;
 }
 
-// 本机局域网 IPv4，私有网段优先（192.168 / 10 / 172.16-31），用来拼手机访问的地址
-function lanAddresses() {
-  const out = [];
-  for (const list of Object.values(os.networkInterfaces())) {
+// 识别虚拟网卡 / VPN / 代理隧道（Clash TUN、utun、Docker、虚拟机等），优先把真实局域网 Wi-Fi / 有线网卡排在前面
+const VIRTUAL_IFACE_RE = /^(utun|tun|tap|ppp|ipsec|gif|stf|awdl|llw|anpi|lo|docker|br-|veth|virbr|vmnet|vboxnet|wg|tailscale|zt|clash|mihomo)/i;
+const VIRTUAL_WIN_RE = /(loopback|vethernet|wsl|hyper-v|clash|mihomo|tun|tap|vpn|tailscale|wireguard|zerotier|vmware|virtualbox)/i;
+const PHYSICAL_IFACE_RE = /^(en\d+|eth\d+|wlan\d+|wi-?fi|wlan|ethernet)/i;
+
+function isIgnoredLanIp(ip) {
+  // 169.254.x.x 链路本地地址；198.18.0.0/15 是 Clash/Surge 等透明代理 Fake-IP 网段，手机扫了必定连不上
+  return /^169\.254\./.test(ip) || /^198\.1[89]\./.test(ip);
+}
+
+function isVirtualInterface(name = '') {
+  return VIRTUAL_IFACE_RE.test(name) || VIRTUAL_WIN_RE.test(name);
+}
+
+function ipSubnetRank(ip) {
+  if (/^192\.168\./.test(ip)) return 0;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(ip)) return 1;
+  if (/^10\./.test(ip)) return 2;
+  if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(ip)) return 4; // CGNAT / Tailscale
+  return 3;
+}
+
+function lanInterfaces(interfaces = os.networkInterfaces()) {
+  const items = [];
+  const seen = new Set();
+  for (const [name, list] of Object.entries(interfaces || {})) {
     for (const i of list || []) {
-      if (i.family === 'IPv4' && !i.internal) out.push(i.address);
+      const family = i.family === 4 ? 'IPv4' : i.family;
+      if (family !== 'IPv4' || i.internal || !i.address || isIgnoredLanIp(i.address)) continue;
+      if (seen.has(i.address)) continue;
+      seen.add(i.address);
+      const virtual = isVirtualInterface(name);
+      const preferred = !virtual && PHYSICAL_IFACE_RE.test(name);
+      items.push({ name, address: i.address, virtual, preferred });
     }
   }
-  const rank = (ip) => (/^(192\.168|10\.|172\.(1[6-9]|2\d|3[01]))/.test(ip) ? 0 : 1);
-  return out.sort((a, b) => rank(a) - rank(b));
+  items.sort((a, b) => {
+    if (a.virtual !== b.virtual) return a.virtual ? 1 : -1;
+    if (a.preferred !== b.preferred) return a.preferred ? -1 : 1;
+    const ra = ipSubnetRank(a.address);
+    const rb = ipSubnetRank(b.address);
+    if (ra !== rb) return ra - rb;
+    return a.name.localeCompare(b.name);
+  });
+  // 有真实物理网卡时过滤掉虚拟隧道网卡，避免下拉框里出现一堆连不上的 VPN 地址；只有虚拟网卡时保留兜底
+  const hasReal = items.some((x) => !x.virtual);
+  return hasReal ? items.filter((x) => !x.virtual) : items;
+}
+
+function lanAddresses(interfaces = os.networkInterfaces()) {
+  return lanInterfaces(interfaces).map((x) => x.address);
 }
 
 // 设备名：只用于「已连接设备」列表，一眼看出是哪台
@@ -137,7 +178,7 @@ function uaLabel(ua = '') {
 }
 
 module.exports = {
-  loginShellEnv, lanAddresses, uaLabel, safeName,
+  loginShellEnv, lanInterfaces, lanAddresses, uaLabel, safeName,
   expandHome, isDir, isDeckDir, resolveDeckRoot, readDeckTitle, deckLabel,
   latestMtime, stablePort, formatTime, fitWindow16x9
 };

@@ -309,18 +309,47 @@ if(PV){
     return out;
   };
 
-  /* 计时：总计时 + 本页用时 / 建议时长 */
-  var t0 = 0, tp = Date.now(), sec = 0;
+  /* 计时：已用总时间 / 全稿预计总时长（单击暂停/继续，双击重置） + 本页用时 / 建议时长 */
+  var totalBudgetSec = slides.reduce(function(sum, s){
+    var n = NOTES[s.dataset.t || ''];
+    return sum + (n && n.sec ? (+n.sec || 0) : 0);
+  }, 0);
+  var started = false, paused = false, totalAcc = 0, totalSince = 0, pageAcc = 0, pageSince = Date.now(), sec = 0;
   var mmss = function(ms){
     var s = Math.max(0, Math.floor(ms/1000));
     return String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0');
   };
-  elEl.onclick = function(){ t0 = 0; elEl.textContent = '00:00'; };
+  elEl.title = '单击暂停/继续 · 双击重置总计时';
   var tick = function(){
-    elEl.textContent = t0 ? mmss(Date.now()-t0) : '00:00';
-    var used = Date.now() - tp;
-    elPg.textContent = mmss(used) + ' / ' + mmss(sec*1000);
-    elPg.className = 'pvpg' + (!sec ? '' : used > sec*1000 ? ' over' : used > sec*800 ? ' warn' : '');
+    var now = Date.now();
+    var totUsed = started ? totalAcc + (paused ? 0 : now - totalSince) : 0;
+    var pgUsed = pageAcc + (paused ? 0 : now - pageSince);
+    var head = (paused ? '⏸ ' : '') + mmss(totUsed);
+    if(totalBudgetSec > 0){
+      elEl.innerHTML = head + ' <small class="pvbudget">/ ' + mmss(totalBudgetSec*1000) + '</small>';
+    }else{
+      elEl.textContent = head;
+    }
+    elEl.className = 'pvtot' + (paused ? ' paused' : (!totalBudgetSec ? '' : totUsed > totalBudgetSec*1000 ? ' over' : totUsed > totalBudgetSec*850 ? ' warn' : ''));
+    elPg.textContent = mmss(pgUsed) + ' / ' + mmss(sec*1000);
+    elPg.className = 'pvpg' + (!sec ? '' : pgUsed > sec*1000 ? ' over' : pgUsed > sec*800 ? ' warn' : '');
+  };
+  elEl.onclick = function(){
+    var now = Date.now();
+    if(!started){ started = true; paused = false; totalSince = now; pageSince = now; }
+    else if(!paused){ totalAcc += now - totalSince; pageAcc += now - pageSince; paused = true; }
+    else{ totalSince = now; pageSince = now; paused = false; }
+    tick();
+  };
+  elEl.ondblclick = function(){
+    var now = Date.now();
+    started = cur > 0;
+    paused = false;
+    totalAcc = 0;
+    totalSince = started ? now : 0;
+    pageAcc = 0;
+    pageSince = now;
+    tick();
   };
   setInterval(tick, 500);
 
@@ -339,8 +368,9 @@ if(PV){
     var key = s.dataset.t || '';
     var note = NOTES[key];
     sec = note && note.sec ? note.sec : 0;
-    tp = Date.now();
-    if(!t0 && n > 0) t0 = Date.now();      /* 离开封面即开始总计时 */
+    pageAcc = 0;
+    pageSince = Date.now();
+    if(!started && n > 0){ started = true; if(!paused) totalSince = Date.now(); }      /* 离开封面即开始总计时 */
     elNo.textContent  = String(n+1).padStart(2,'0');
     elTtl.textContent = key || ('第 ' + (n+1) + ' 页');
     elBody.innerHTML  = render(note && note.text);

@@ -10,6 +10,7 @@ const vm = require('node:vm');
 const Sync = require('../kernel/stage-sync');
 const IframeSync = require('../src/iframe-sync');
 const { RemoteServer } = require('../src/remote');
+const { lanInterfaces, lanAddresses } = require('../src/util');
 
 test('isEditableTarget 识别输入框、下拉框与富文本，放行普通按钮与容器', () => {
   const mk = (tag, extra = {}) => ({ nodeType: 1, tagName: tag, ...extra });
@@ -188,6 +189,16 @@ test('buildSubframeScript 只采集真实事件并校验观众窗消息来源', 
   assert.equal(clickMsgs2[0].rx, 0.25);
   assert.equal(clickMsgs2[0].ry, 0.5);
 
+  // 子帧焦点防困：普通元素按 ArrowRight / PageDown 透传翻页，按 Escape 回收焦点；输入框内按 ArrowRight 不误触翻页
+  presenterListeners.get('keydown')({ key: 'ArrowRight', target: btn, preventDefault() {} });
+  presenterListeners.get('keydown')({ key: 'Escape', target: btn, preventDefault() {} });
+  const inputNode = { nodeType: 1, tagName: 'INPUT', type: 'text', blur() {} };
+  presenterListeners.get('keydown')({ key: 'ArrowRight', target: inputNode, preventDefault() {} });
+  const navMsgs = posted.filter((m) => m.op === 'nav-key');
+  assert.equal(navMsgs.length, 1);
+  assert.equal(navMsgs[0].dir, 1);
+  assert.equal(posted.some((m) => m.op === 'refocus'), true);
+
   // 观众窗口子帧忽略非 window.top 发来的伪造消息
   let audienceClicked = 0;
   const audienceListeners = new Map();
@@ -296,4 +307,25 @@ test('访客大屏服务：开放真实幻灯资源、对访客屏蔽演讲台�
   } finally {
     await server.stop();
   }
+});
+
+test('lanAddresses 过滤 Clash Fake-IP 与 VPN 虚拟网卡，物理网卡优先且纯虚拟网兜底可用', () => {
+  const mixed = {
+    lo0: [{ family: 'IPv4', internal: true, address: '127.0.0.1' }],
+    utun3: [
+      { family: 'IPv4', internal: false, address: '198.18.0.1' },
+      { family: 'IPv4', internal: false, address: '10.8.0.5' }
+    ],
+    docker0: [{ family: 'IPv4', internal: false, address: '172.17.0.1' }],
+    en5: [{ family: 'IPv4', internal: false, address: '169.254.12.3' }, { family: 'IPv4', internal: false, address: '10.20.30.40' }],
+    en0: [{ family: 'IPv4', internal: false, address: '192.168.31.88' }]
+  };
+  assert.deepEqual(lanAddresses(mixed), ['192.168.31.88', '10.20.30.40']);
+  assert.deepEqual(lanInterfaces(mixed).map((x) => x.name), ['en0', 'en5']);
+
+  // 仅存在 Tailscale/VPN 虚拟网卡时保留非 Fake-IP 地址兜底
+  const vpnOnly = {
+    utun2: [{ family: 'IPv4', internal: false, address: '198.18.0.1' }, { family: 'IPv4', internal: false, address: '100.90.1.2' }]
+  };
+  assert.deepEqual(lanAddresses(vpnOnly), ['100.90.1.2']);
 });

@@ -4,7 +4,7 @@ const path = require('path');
 const { app, BrowserWindow, Menu, clipboard, dialog, ipcMain, screen, shell } = require('electron');
 const store = require('./store');
 const { scanRoots } = require('./library');
-const { Presentation } = require('./session');
+const { Presentation, computePlayTargets } = require('./session');
 const { exportZip, exportPptx, installDownloadHandler } = require('./export');
 const { buildMenu } = require('./menu');
 const skill = require('./skill');
@@ -248,7 +248,7 @@ async function syncRemoteDeck(dir, purpose) {
   }
 }
 
-async function startPresentation(dir, layoutTargets = null) {
+async function startPresentation(dir, layoutTargets = null, startSlide = 0) {
   if (presentation) return presentation.notify('正在放映，先结束当前放映');
   if (exporting.has(dir)) return;
   if (!(await syncRemoteDeck(dir, '放映'))) return;
@@ -256,6 +256,10 @@ async function startPresentation(dir, layoutTargets = null) {
   const root = resolveDeckRoot(dir);
   if (!root) return dialog.showErrorBox('不是稿子目录', `${dir}\n里面要有 index.html 和 deck.config.js（或 notes.js）。`);
   store.touchRecent(root);
+  const resolvedTargets = layoutTargets || (() => {
+    const t = computePlayTargets(screen.getAllDisplays(), screen.getPrimaryDisplay(), store.read().playTargets);
+    return { audience: t.audience, presenter: t.presenter };
+  })();
   const own = remoteDecks.owner(root);
   presentation = new Presentation(root, {
     confirmServices,
@@ -272,7 +276,7 @@ async function startPresentation(dir, layoutTargets = null) {
     }
   });
   try {
-    await presentation.start(store.read().hotReload, layoutTargets);
+    await presentation.start(store.read().hotReload, resolvedTargets, startSlide);
     if (library && !library.isDestroyed()) library.hide();
     rebuildMenu();
   } catch (e) {
@@ -425,18 +429,31 @@ ipcMain.handle('stage:get-state', () => buildState());
 ipcMain.handle('stage:pointer-set', (_e, prefs) => {
   const clean = normalizePointer(prefs);
   store.update((c) => { c.pointer = clean; });
+  if (presentation) presentation.updatePointer({ value: clean, ...pointerCatalog() });
   pushState();
   remoteBroadcast();
   return clean;
 });
 ipcMain.handle('stage:play-targets', () => {
-  if (presentation) return presentation.targets();
-  const primary = screen.getPrimaryDisplay();
-  return screen.getAllDisplays().map((d, i) => ({
-    id: String(d.id), mode: 'screen', displayId: d.id,
-    label: `屏幕 ${i + 1} · ${d.label || (d.id === primary.id ? '内置显示器' : '外接显示器')} ${d.size.width}×${d.size.height}`,
-    checked: d.id === primary.id
-  })).concat([{ id: 'window', mode: 'window', displayId: primary.id, label: '窗口模式（共享窗口用）', checked: false }]);
+  if (presentation) {
+    const list = presentation.targets();
+    const curAud = list.find((t) => t.checked);
+    const primary = screen.getPrimaryDisplay();
+    const curPres = presentation.presenterTarget ? String(presentation.presenterTarget.id) : String(primary.id);
+    return { list, audience: curAud ? curAud.id : 'window', presenter: curPres };
+  }
+  return computePlayTargets(screen.getAllDisplays(), screen.getPrimaryDisplay(), store.read().playTargets);
+});
+ipcMain.handle('stage:play-targets-set', (_e, targets) => {
+  if (!targets || typeof targets !== 'object') return;
+  const screens = screen.getAllDisplays().length;
+  store.update((c) => {
+    c.playTargets = {
+      audience: String(targets.audience || ''),
+      presenter: String(targets.presenter || ''),
+      screens
+    };
+  });
 });
 ipcMain.handle('stage:add-root', () => actions.addRootDialog());
 ipcMain.handle('stage:preview-get', (_e, dir, retry) => {
@@ -455,7 +472,7 @@ ipcMain.handle('stage:forget-connection', (_e, id) => { connections.remove(id); 
 ipcMain.handle('stage:refresh-remote', (_e, spec) => { remoteDecks.refreshAll(spec ? [spec] : remoteRoots(store.read().roots)); });
 ipcMain.handle('stage:select', (_e, dir) => { selectedDir = dir; });
 ipcMain.handle('stage:export', (_e, dir, kind) => exportDeck(dir, kind));
-ipcMain.handle('stage:open', (_e, dir, layoutTargets) => startPresentation(dir, layoutTargets));
+ipcMain.handle('stage:open', (_e, dir, layoutTargets, startSlide) => startPresentation(dir, layoutTargets, startSlide));
 ipcMain.handle('stage:reveal', (_e, dir) => {
   if (remoteDecks.owner(dir) && !isDeckDir(dir)) return toast('这份远端稿子还没同步到本机，放映或导出一次就会同步');
   shell.showItemInFolder(dir);
@@ -477,6 +494,12 @@ ipcMain.handle('stage:remote-toggle', async (_e, on) => {
 });
 ipcMain.handle('stage:remote-reset', () => remote.reset());
 ipcMain.handle('stage:remote-kick', (_e, sid) => remote.kick(sid));
+ipcMain.handle('stage:remote-host', async (_e, host) => {
+  remote.setHost(host);
+  const info = await remote.info();
+  if (presentation && presentation.visitorQrMode !== 'off') presentation.toggleVisitorQr(presentation.visitorQrMode, info);
+  return info;
+});
 ipcMain.on('stage:visitor-qr', async (e, modeOrOn) => {
   if (!fromPresenter(e)) return;
   const mode = presentation.normalizeVisitorQrMode(modeOrOn);

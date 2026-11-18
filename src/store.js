@@ -11,7 +11,7 @@ const { DEFAULT_POINTER, normalizePointer } = require('./pointer');
 // 首次启动时预置的稿库目录（不存在的会被过滤掉）。默认为空，由用户在稿库里添加。
 const SEED_ROOTS = [];
 
-const EMPTY = { roots: [], recent: [], skillAgents: [], hotReload: false, trusted: {}, presenter: {}, pointer: DEFAULT_POINTER, demo: {}, defaults: {} };
+const EMPTY = { roots: [], recent: [], skillAgents: [], hotReload: false, trusted: {}, presenter: {}, pointer: DEFAULT_POINTER, playTargets: null, demo: {}, defaults: {} };
 
 function file() { return path.join(app.getPath('userData'), 'config.json'); }
 

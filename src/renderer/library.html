@@ -43,6 +43,7 @@
       <div id="status"></div>
       <button id="togglePreview" class="link-paper">预览</button>
       <button id="reveal" class="link-paper">在 Finder 中显示</button>
+      <button id="openPlaySetup" class="link-paper">光标与屏幕</button>
       <button id="play" class="play">开始放映　⏎</button>
     </footer>
   </main>
@@ -73,8 +74,11 @@
       <div id="pointerSizes" class="pointer-sizes"></div>
     </section>
     <div class="pointer-actions">
-      <span class="muted small">设置会保留到下次放映</span>
-      <button id="confirmPlay" class="play">开始放映　⏎</button>
+      <span class="muted small">设置会自动记住；日常直接点底栏「开始放映」即可一键开播</span>
+      <div class="pointer-btns">
+        <button id="savePlaySetup" class="link-ink" type="button">仅保存</button>
+        <button id="confirmPlay" class="play" type="button">保存并放映　⏎</button>
+      </div>
     </div>
   </div>
 </div>
@@ -83,7 +87,7 @@
   <button id="zPrev" class="zbtn" title="上一页 ←">‹</button>
   <figure>
     <img id="zImg" alt="">
-    <figcaption><span id="zCap" class="mono"></span><span class="mono muted"> · ← → 翻页 · 空格 / Esc 关闭</span></figcaption>
+    <figcaption><span id="zCap" class="mono"></span><span class="mono muted"> · ← → 翻页 · 回车从本页放映 · 空格 / Esc 关闭</span><button id="zPlay" class="play small-btn zplay" type="button">从本页放映　⏎</button></figcaption>
   </figure>
   <button id="zNext" class="zbtn" title="下一页 →">›</button>
   <button id="zClose" class="link-paper zclose">关闭 Esc</button>
@@ -169,6 +173,10 @@
           <section>
             <span class="label ink">PAIRING CODE · 遥控配对码</span>
             <div id="pairCode" class="code"></div>
+            <div id="hostSelectRow" class="url-row" hidden>
+              <span class="mono muted url-text">局域网网卡（二维码与链接跟随切换）</span>
+              <select id="remoteHostSelect" class="host-select" aria-label="选择局域网网卡地址"></select>
+            </div>
             <div class="url-row"><span id="remoteUrl" class="mono muted url-text"></span><button id="copyUrl" class="link-ink">复制遥控地址</button></div>
             <div id="visitorRow" class="url-row" hidden><span id="visitorUrl" class="mono muted url-text"></span><button id="copyVisitorUrl" class="link-ink">复制访客链接</button></div>
           </section>

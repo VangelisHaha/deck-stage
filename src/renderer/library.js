@@ -109,7 +109,7 @@
       meta.appendChild(acts);
       row.appendChild(meta);
       row.onclick = () => { selected = d.dir; window.stage.select(selected); renderList(); renderBar(); };
-      row.ondblclick = () => showPlaySetup(true);
+      row.ondblclick = () => playNow(0);
       list.appendChild(row);
     });
 
@@ -139,6 +139,7 @@
       status.appendChild(el('span', 'text', state.plan.text));
     }
     $('play').disabled = !selected;
+    $('openPlaySetup').style.visibility = selected ? 'visible' : 'hidden';
     $('reveal').style.visibility = selected ? 'visible' : 'hidden';
     $('installDemo').hidden = !!(state.demo && state.demo.installed);
     syncPreview();
@@ -158,16 +159,24 @@
         : '还没收到 Agent 的回报。装好后这里会变成「已安装 · Agent 名」。'));
   }
 
-  let playTargets = [];
+  function playNow(startSlide = 0) {
+    if (!selected) return;
+    closeZoom();
+    window.stage.open(selected, null, startSlide);
+  }
+
   async function loadPlayTargets() {
-    playTargets = await window.stage.getPlayTargets();
-    const fill = (id, selected) => {
+    const res = await window.stage.getPlayTargets();
+    const list = Array.isArray(res) ? res : (res && res.list) || [];
+    const defAud = (res && res.audience) || ((list.find((t) => t.checked) || list[0] || {}).id);
+    const screenOnly = list.filter((t) => t.mode === 'screen');
+    const defPres = (res && res.presenter) || ((screenOnly[0] || list[0] || {}).id);
+    const fill = (id, items, selectedId) => {
       const box = $(id); box.textContent = '';
-      playTargets.forEach((t) => { const o = document.createElement('option'); o.value = t.id; o.textContent = t.label; o.selected = String(t.id) === String(selected); box.appendChild(o); });
+      items.forEach((t) => { const o = document.createElement('option'); o.value = t.id; o.textContent = t.label; o.selected = String(t.id) === String(selectedId); box.appendChild(o); });
     };
-    const primary = playTargets.find((t) => t.checked) || playTargets[0];
-    fill('audienceTarget', primary && primary.id);
-    fill('presenterTarget', primary && primary.id);
+    fill('audienceTarget', list, defAud);
+    fill('presenterTarget', screenOnly.length ? screenOnly : list, defPres);
   }
 
   function renderPointerSetup() {
@@ -213,13 +222,20 @@
     renderPointerSetup();
   }
 
+  async function savePlayPrefs() {
+    if (!playPointer) return null;
+    await window.stage.setPointer(playPointer);
+    const target = { audience: $('audienceTarget').value, presenter: $('presenterTarget').value };
+    await window.stage.setPlayTargets(target);
+    return target;
+  }
+
   async function confirmPlay() {
     if (!selected || !playPointer) return;
     const dir = selected;
-    await window.stage.setPointer(playPointer);
-    const target = { audience: $('audienceTarget').value, presenter: $('presenterTarget').value };
+    const target = await savePlayPrefs();
     showPlaySetup(false);
-    window.stage.open(dir, target);
+    window.stage.open(dir, target, 0);
   }
 
   // ---- 预览浮窗：目录 + 每页缩略图 ----
@@ -289,9 +305,10 @@
       if (s.thumb) { const im = el('img'); im.alt = ''; im.src = s.thumb; th.appendChild(im); }
       li.appendChild(th);
       li.appendChild(el('span', 'tt', s.title));
+      li.title = '单击放大查看 · 双击从本页开始放映';
       li.onmouseenter = () => setPreviewFocus(i);
       li.onclick = () => openZoom(i);
-      li.ondblclick = () => showPlaySetup(true); // 双击预览里的某一页 = 开始放映这份稿子
+      li.ondblclick = (e) => { e.stopPropagation(); playNow(i); }; // 双击预览里的某一页 = 直接从这一页开始放映
       list.appendChild(li);
     });
     setPreviewFocus(Math.min(pv.focus, Math.max(0, slides.length - 1)));
@@ -348,6 +365,19 @@
     $('remoteOff').hidden = on;
     if (!on) { $('qr').removeAttribute('src'); return; }
     $('qr').src = qrRole === 'visitor' ? (remoteInfo.visitorQr || remoteInfo.qr) : remoteInfo.qr;
+    const hosts = remoteInfo.hosts || [];
+    $('hostSelectRow').hidden = hosts.length <= 1;
+    if (hosts.length > 1) {
+      const sel = $('remoteHostSelect');
+      sel.textContent = '';
+      hosts.forEach((h) => {
+        const o = document.createElement('option');
+        o.value = h.address;
+        o.textContent = `${h.address} (${h.name})`;
+        o.selected = h.address === remoteInfo.host;
+        sel.appendChild(o);
+      });
+    }
     $('visitorRow').hidden = !remoteInfo.visitorUrl;
     $('visitorUrl').textContent = remoteInfo.visitorUrl ? '访客：' + remoteInfo.visitorUrl : '';
     $('pairCode').textContent = remoteInfo.code.replace(/^(\d{3})(\d{3})$/, '$1 $2');
@@ -409,8 +439,9 @@
   };
   $('pvClose').onclick = () => $('togglePreview').click();
   document.querySelector('.pv-hero').onclick = () => openZoom();
-  document.querySelector('.pv-hero').ondblclick = () => showPlaySetup(true);
-  $('zImg').ondblclick = () => showPlaySetup(true); // 放大图上双击也一样
+  document.querySelector('.pv-hero').ondblclick = () => playNow(pv.focus);
+  $('zImg').ondblclick = () => playNow(zoom.i);
+  $('zPlay').onclick = () => playNow(zoom.i);
   $('zPrev').onclick = () => showZoom(zoom.i - 1);
   $('zNext').onclick = () => showZoom(zoom.i + 1);
   $('zClose').onclick = closeZoom;
@@ -487,6 +518,10 @@
   $('remote').addEventListener('click', (e) => { if (e.target === $('remote')) showRemote(false); });
   $('qrTabRemote').onclick = () => { qrRole = 'remote'; renderRemote(); };
   $('qrTabVisitor').onclick = () => { qrRole = 'visitor'; renderRemote(); };
+  $('remoteHostSelect').onchange = async (e) => {
+    remoteInfo = await window.stage.remoteSetHost(e.target.value);
+    renderRemote();
+  };
   $('remoteToggle').onclick = async () => { await window.stage.remoteToggle(!remoteInfo.enabled); await refreshRemote(); };
   $('resetPair').onclick = async () => { await window.stage.remoteReset(); await refreshRemote(); };
   $('copyUrl').onclick = async (e) => { await window.stage.copy(remoteInfo.base); flash(e.target, '已复制'); };
@@ -495,8 +530,10 @@
   $('revealSkill').onclick = () => window.stage.revealSkill();
   $('copyPath').onclick = async (e) => { await window.stage.copy(state.skills.dir); flash(e.target, '已复制'); };
   $('copyPrompt').onclick = async (e) => { await window.stage.copy(state.skills.prompt); flash(e.target, '已复制'); };
-  $('play').onclick = () => { if (selected) showPlaySetup(true); };
+  $('play').onclick = () => playNow(0);
+  $('openPlaySetup').onclick = () => { if (selected) showPlaySetup(true); };
   $('closePlaySetup').onclick = () => showPlaySetup(false);
+  $('savePlaySetup').onclick = async () => { await savePlayPrefs(); showPlaySetup(false); };
   $('pointerMore').onclick = () => { pointerExpanded = !pointerExpanded; renderPointerSetup(); };
   $('playSetup').addEventListener('click', (e) => { if (e.target === $('playSetup')) showPlaySetup(false); });
   $('confirmPlay').onclick = confirmPlay;
@@ -505,6 +542,7 @@
   document.addEventListener('keydown', (e) => {
     if (!$('pvZoom').hidden) {
       if (e.key === 'Escape' || e.key === ' ') { e.preventDefault(); closeZoom(); }
+      else if (e.key === 'Enter') { e.preventDefault(); playNow(zoom.i); }
       else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); showZoom(zoom.i + 1); }
       else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); showZoom(zoom.i - 1); }
       return;
@@ -518,7 +556,7 @@
     const i = decks.findIndex((d) => d.dir === selected);
     if (e.key === 'ArrowDown' && i < decks.length - 1) { e.preventDefault(); selected = decks[i + 1].dir; window.stage.select(selected); renderList(); renderBar(); }
     else if (e.key === 'ArrowUp' && i > 0) { e.preventDefault(); selected = decks[i - 1].dir; window.stage.select(selected); renderList(); renderBar(); }
-    else if (e.key === 'Enter' && selected) { e.preventDefault(); showPlaySetup(true); }
+    else if (e.key === 'Enter' && selected) { e.preventDefault(); playNow(0); }
   });
 
   window.stage.onChanged(refresh);

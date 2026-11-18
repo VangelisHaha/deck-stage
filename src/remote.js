@@ -13,7 +13,7 @@ const crypto = require('crypto');
 const QRCode = require('qrcode');
 const { makeHandler, serveFile, send } = require('./server');
 const { kernelFile } = require('./kernel');
-const { lanAddresses, uaLabel } = require('./util');
+const { lanInterfaces, lanAddresses, uaLabel } = require('./util');
 
 const ASSET_DIR = path.join(__dirname, 'remote');
 const ASSETS = {
@@ -68,6 +68,7 @@ class RemoteServer {
     this.token = '';
     this.visitorToken = '';
     this.code = '';
+    this.preferredHost = '';
     this.devices = new Map(); // sid -> { ua, ip, at, role }
     this.conns = new Set();   // SSE 连接 { res, sid }
     this.fails = new Map();   // ip -> { n, until }
@@ -138,10 +139,26 @@ class RemoteServer {
     this.onChange();
   }
 
+  setHost(host) {
+    this.preferredHost = String(host || '').trim();
+    this.onChange();
+  }
+
+  resolveNetwork() {
+    const hosts = lanInterfaces().map((x) => ({
+      name: x.name,
+      address: x.address,
+      url: `http://${x.address}:${this.port}`
+    }));
+    const urls = hosts.map((h) => h.url);
+    const chosen = hosts.find((h) => h.address === this.preferredHost) || hosts[0] || null;
+    const base = chosen ? chosen.url : `http://127.0.0.1:${this.port}`;
+    return { host: chosen ? chosen.address : '127.0.0.1', hosts, urls, base };
+  }
+
   async info() {
-    if (!this.enabled) return { enabled: false, devices: [] };
-    const urls = lanAddresses().map((ip) => `http://${ip}:${this.port}`);
-    const base = urls[0] || `http://127.0.0.1:${this.port}`;
+    if (!this.enabled) return { enabled: false, devices: [], hosts: [], urls: [] };
+    const { host, hosts, urls, base } = this.resolveNetwork();
     const link = `${base}/?t=${this.token}`;
     const visitorLink = `${base}/?v=${this.visitorToken}`;
     const svg = await QRCode.toString(link, { type: 'svg', margin: 1, color: { dark: '#121212', light: '#FAF8F3' } });
@@ -149,6 +166,8 @@ class RemoteServer {
     const online = new Set([...this.conns].map((c) => c.sid));
     return {
       enabled: true,
+      host,
+      hosts,
       base,
       urls,
       code: this.code,
@@ -258,7 +277,7 @@ class RemoteServer {
 
     if (req.method === 'GET' && p === '/api/visitor-info') {
       if (!this.enabled) return json(res, 404, { error: 'disabled' });
-      const base = lanAddresses().map((ip) => `http://${ip}:${this.port}`)[0] || `http://127.0.0.1:${this.port}`;
+      const { base } = this.resolveNetwork();
       const svg = await QRCode.toString(`${base}/?v=${this.visitorToken}`, { type: 'svg', margin: 1, color: { dark: '#121212', light: '#FAF8F3' } });
       return json(res, 200, { qr: 'data:image/svg+xml;utf8,' + encodeURIComponent(svg), url: `${base}/?v=${this.visitorToken}` });
     }

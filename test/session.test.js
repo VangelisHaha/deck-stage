@@ -3,10 +3,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { loadModule } = require('./helpers/runtime');
 
-function session(platform, extra = {}, globals = {}) {
-  const { Presentation } = loadModule(require.resolve('../src/session'), {
+function sessionModule(platform = 'darwin', extra = {}, globals = {}) {
+  return loadModule(require.resolve('../src/session'), {
     electron: {}, './services': {}, './export': {}, ...extra
   }, { process: { platform }, ...globals });
+}
+
+function session(platform, extra = {}, globals = {}) {
+  const { Presentation } = sessionModule(platform, extra, globals);
   return Object.create(Presentation.prototype);
 }
 
@@ -101,4 +105,41 @@ test('访客二维码三态切换与大屏状态实时转发', () => {
   assert.equal(liveEvents.length, 1);
   assert.equal(liveEvents[0][0], 'dom');
   assert.equal(audienceMsgs.some(([ch]) => ch === 'stage:iframe-sync'), true);
+});
+
+test('computePlayTargets：单屏默认窗口模式，双屏默认观众投外接屏，热插拔改变屏幕数时自动切回智能默认', () => {
+  const { computePlayTargets } = sessionModule('darwin');
+  const builtin = { id: 1, label: 'Built-in', size: { width: 1440, height: 900 } };
+  const external = { id: 2, label: 'DELL U2723QE', size: { width: 2560, height: 1440 } };
+
+  const single = computePlayTargets([builtin], builtin, null);
+  assert.equal(single.audience, 'window');
+  assert.equal(single.presenter, '1');
+  assert.equal(single.list.find((x) => x.id === 'window').checked, true);
+
+  const dual = computePlayTargets([builtin, external], builtin, null);
+  assert.equal(dual.audience, '2');
+  assert.equal(dual.presenter, '1');
+  assert.equal(dual.list.find((x) => x.id === '2').checked, true);
+
+  // 单屏下保存过偏好，插上外接屏变成双屏后自动投外接屏，不沿用单屏的窗口偏好
+  const pluggedIn = computePlayTargets([builtin, external], builtin, { audience: 'window', presenter: '1', screens: 1 });
+  assert.equal(pluggedIn.audience, '2');
+
+  // 相同屏幕数下的手动偏好正常保留
+  const kept = computePlayTargets([builtin, external], builtin, { audience: '1', presenter: '2', screens: 2 });
+  assert.equal(kept.audience, '1');
+  assert.equal(kept.presenter, '2');
+});
+
+test('updatePointer 实时推送新光标配置到观众与演讲者窗口', () => {
+  const p = session('darwin');
+  const received = [];
+  p.audience = { isDestroyed: () => false, webContents: { send: (ch, d) => received.push(['audience', ch, d.value.style]) } };
+  p.presenter = { isDestroyed: () => false, webContents: { send: (ch, d) => received.push(['presenter', ch, d.value.style]) } };
+  p.updatePointer({ value: { style: 'ring', size: 'medium' } });
+  assert.deepEqual(received, [
+    ['audience', 'stage:pointer-config', 'ring'],
+    ['presenter', 'stage:pointer-config', 'ring']
+  ]);
 });

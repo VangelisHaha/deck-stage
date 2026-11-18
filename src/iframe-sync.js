@@ -10,6 +10,18 @@ function shouldSkipSync(el) {
   return false;
 }
 
+function canScrollHorizontally(el, doc) {
+  for (let cur = el; cur && cur !== doc; cur = cur.parentElement) {
+    if ((cur.scrollWidth || 0) > (cur.clientWidth || 0) + 6) {
+      const win = doc && doc.defaultView;
+      if (!win || typeof win.getComputedStyle !== 'function') return true;
+      const ox = win.getComputedStyle(cur).overflowX;
+      if (ox === 'auto' || ox === 'scroll' || cur === doc.documentElement || cur === doc.body) return true;
+    }
+  }
+  return false;
+}
+
 function domPathOf(doc, node) {
   if (!doc || !node || !doc.body) return null;
   if (node === doc || node === doc.documentElement || node === doc.body) return [];
@@ -136,6 +148,7 @@ function buildSubframeScript(kind) {
     window.__dsSubframeMode = ${JSON.stringify(mode)};
     const isEditableTarget = ${isEditableTarget.toString()};
     const shouldSkipSync = ${shouldSkipSync.toString()};
+    const canScrollHorizontally = ${canScrollHorizontally.toString()};
     const domPathOf = ${domPathOf.toString()};
     const elementHint = ${elementHint.toString()};
     const nodeFromPath = ${nodeFromPath.toString()};
@@ -167,6 +180,29 @@ function buildSubframeScript(kind) {
           post({ op: 'typing', on: false });
         }
       });
+
+      // 子帧焦点防困：未在输入框打字时，PageUp/PageDown 和无横向滚动时的左右键直接透传给舞台翻页，Esc 一键退回舞台焦点
+      window.addEventListener('keydown', (e) => {
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
+        if (isEditableTarget(e.target)) {
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            if (e.target.blur) e.target.blur();
+            post({ op: 'typing', on: false });
+          }
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          post({ op: 'refocus' });
+        } else if (e.key === 'PageDown' || e.key === 'PageUp') {
+          e.preventDefault();
+          post({ op: 'nav-key', dir: e.key === 'PageDown' ? 1 : -1 });
+        } else if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && !canScrollHorizontally(e.target, document)) {
+          e.preventDefault();
+          post({ op: 'nav-key', dir: e.key === 'ArrowRight' ? 1 : -1 });
+        }
+      }, true);
 
       const onClick = (e) => {
         if (!e.isTrusted || e.button !== 0 || shouldSkipSync(e.target)) return;
@@ -258,6 +294,7 @@ function buildSubframeScript(kind) {
 
 module.exports = {
   shouldSkipSync,
+  canScrollHorizontally,
   domPathOf,
   elementHint,
   nodeFromPath,
