@@ -6,19 +6,37 @@ const { BrowserWindow, Notification, powerSaveBlocker, screen, session } = requi
 const { startServer } = require('./server');
 const { JPEG_PATCH_JS, START_EXPORT_JS } = require('./export');
 const { Services } = require('./services');
+const { buildSubframeScript } = require('./iframe-sync');
+const { domSyncKey } = require('../kernel/stage-sync');
 const { fitWindow16x9, stablePort, readDeckTitle } = require('./util');
 
 const PRELOAD = path.join(__dirname, 'deck-preload.js');
+const STAGE_SYNC_PRELOAD = path.join(__dirname, '..', 'kernel', 'stage-sync.js');
 const sameRect = (a, b) => a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 const BG = { audience: '#000000', presenter: '#0F0F0E' };
 
+let syncPreloadRegistered = false;
+function ensureStageSyncPreload() {
+  if (syncPreloadRegistered) return;
+  if (session && session.defaultSession && typeof session.defaultSession.registerPreloadScript === 'function') {
+    session.defaultSession.registerPreloadScript({
+      id: 'deckstage-stage-sync',
+      type: 'frame',
+      filePath: STAGE_SYNC_PRELOAD
+    });
+    syncPreloadRegistered = true;
+  }
+}
+
 class Presentation {
-  constructor(root, { onEnd, onChange, confirmServices, resync }) {
+  constructor(root, { onEnd, onChange, onLiveEvent, getPointer, confirmServices, resync }) {
     this.root = root;
     this.resync = resync || null; // 远端稿子：把最新内容同步到本机的函数
     this.services = new Services(root, { confirm: confirmServices, notify: (m) => this.notify(m) });
     this.onEnd = onEnd;
     this.onChange = onChange;
+    this.onLiveEvent = onLiveEvent || (() => {});
+    this.getPointer = getPointer || (() => null);
     this.server = null;
     this.audience = null;
     this.presenter = null;
@@ -36,9 +54,18 @@ class Presentation {
     this.displayTimer = null;
     this.lastApply = 0;
     this.lastEsc = 0;
-    this.typing = false;  // 演讲者窗口开着目录：放映快捷键让位
+    this.typing = false;  // 兼容旧字段
+    this.typingByKind = { presenter: false, audience: false }; // 任一窗口输入框或目录聚焦时，单键放映快捷键让位
     this.overlay = false; // 目录或操作指引开着：Esc 先关它们
     this.lightbox = { audience: false, presenter: false }; // 点图放大的灯箱开着：Esc 先关它
+    this.lbState = null;
+    this.domSyncMap = new Map();
+    this.visitorQrMode = 'off'; // 'off' | 'full' | 'corner'
+    this.startedAt = Date.now();
+    this.reloadSeq = 0;
+    this.remoteEnabled = false;
+    this.remoteVisitors = 0;
+    this.remoteRemotes = 0;
     // 遥控端要用的稿子信息：每页标题、台词、建议用时，以及当前页和计时起点
     this.title = readDeckTitle(root);
     this.slides = [];
@@ -48,6 +75,7 @@ class Presentation {
   }
 
   async start(hotReload, layoutTargets = null) {
+    ensureStageSyncPreload();
     await this.services.start(); // 稿子自带的后台服务（deckstage.json），先于窗口启动，页面一进来就能连上
     this.server = await startServer(this.root, stablePort(this.root));
     await session.defaultSession.clearCache();
@@ -66,7 +94,14 @@ class Presentation {
     this.audience = this.makeWindow('audience', `${this.server.origin}/index.html`);
     this.presenter = this.makeWindow('presenter', `${this.server.origin}/index.html?notes=1`);
     this.audience.on('closed', () => this.end());
-    this.presenter.on('closed', () => { this.presenter = null; this.typing = false; this.overlay = false; this.lightbox.presenter = false; this.onChange(); });
+    this.presenter.on('closed', () => {
+      this.presenter = null;
+      this.typing = false;
+      this.typingByKind.presenter = false;
+      this.overlay = false;
+      this.lightbox.presenter = false;
+      this.onChange();
+    });
 
     this.applyTarget(this.target, { manual: false });
     this.audience.once('ready-to-show', () => this.audience.show());
@@ -99,10 +134,22 @@ class Presentation {
     const wc = win.webContents;
     wc.setWindowOpenHandler(() => ({ action: 'deny' }));
     wc.on('will-navigate', (e, u) => {
-      if (new URL(u).origin !== this.server.origin) e.preventDefault();
+      if (e.isMainFrame !== false && new URL(u).origin !== this.server.origin) e.preventDefault();
+    });
+    // 子帧（内嵌网页 iframe）加载完成后注入同步桥：演讲者采集真实操作，观众窗重放
+    wc.on('frame-created', (_e, details) => {
+      const frame = details && details.frame;
+      if (!frame || frame === wc.mainFrame) return;
+      frame.on('dom-ready', () => {
+        if (frame.isDestroyed() || frame === wc.mainFrame) return;
+        frame.executeJavaScript(buildSubframeScript(kind), true).catch(() => {});
+      });
     });
     wc.on('before-input-event', (e, input) => this.onKey(e, input, kind));
-    wc.on('did-finish-load', () => this.loadDeckInfo());
+    wc.on('did-finish-load', () => {
+      this.loadDeckInfo();
+      if (kind === 'presenter') this.pushPresenterStatus();
+    });
     wc.on('did-navigate-in-page', () => this.syncCur());
     win.loadURL(url);
     return win;
@@ -111,7 +158,14 @@ class Presentation {
   reopenPresenter() {
     if (this.presenter) return this.presenter.focus();
     this.presenter = this.makeWindow('presenter', `${this.server.origin}/index.html?notes=1`);
-    this.presenter.on('closed', () => { this.presenter = null; this.typing = false; this.overlay = false; this.lightbox.presenter = false; this.onChange(); });
+    this.presenter.on('closed', () => {
+      this.presenter = null;
+      this.typing = false;
+      this.typingByKind.presenter = false;
+      this.overlay = false;
+      this.lightbox.presenter = false;
+      this.onChange();
+    });
     this.placePresenter();
     this.presenter.once('ready-to-show', () => { this.presenter.show(); this.presenter.focus(); });
     this.onChange();
@@ -270,11 +324,25 @@ class Presentation {
 
   // ---------- 快捷键 ----------
 
+  setTyping(wc, on) {
+    if (!this.typingByKind) this.typingByKind = { presenter: false, audience: false };
+    if (this.presenter && !this.presenter.isDestroyed() && wc === this.presenter.webContents) {
+      this.typingByKind.presenter = !!on;
+      this.typing = !!on;
+    } else if (this.audience && !this.audience.isDestroyed() && wc === this.audience.webContents) {
+      this.typingByKind.audience = !!on;
+    }
+  }
+
+  isWindowTyping(kind) {
+    if (this.typingByKind && this.typingByKind[kind]) return true;
+    return kind === 'presenter' && !!this.typing;
+  }
+
   onKey(e, input, kind) {
     if (input.type !== 'keyDown' || input.meta || input.control || input.alt) return;
-    if (this.typing && input.key.toLowerCase() !== 'escape') return;
-    // 灯箱（点图放大）开着时 Esc 只关灯箱；之后才是目录 / 操作指引，最后才是投屏和结束放映
-    if (input.key === 'Escape' && this.lightbox[kind]) {
+    // 灯箱（点图放大）开着时 Esc 只关灯箱；之后才是目录 / 操作指引，再是输入框失焦，最后才是投屏和结束放映
+    if (this.lightbox && input.key === 'Escape' && this.lightbox[kind]) {
       const win = kind === 'presenter' ? this.presenter : this.audience;
       if (win && !win.isDestroyed()) {
         e.preventDefault();
@@ -285,7 +353,18 @@ class Presentation {
     // 演讲者窗口里开着目录 / 操作指引时，Esc 先收起它们，不动投屏也不结束放映
     if (kind === 'presenter' && this.overlay && input.key === 'Escape') {
       e.preventDefault();
-      this.presenter.webContents.send('stage:close-overlay');
+      if (this.presenter && !this.presenter.isDestroyed()) this.presenter.webContents.send('stage:close-overlay');
+      return;
+    }
+    // 输入框（含内嵌网页 iframe 内输入框）聚焦时，所有单键放映快捷键让位，Esc 只让输入框失焦
+    if (this.isWindowTyping(kind)) {
+      if (input.key === 'Escape') {
+        const win = kind === 'presenter' ? this.presenter : this.audience;
+        if (win && !win.isDestroyed()) {
+          e.preventDefault();
+          win.webContents.send('stage:blur-editable');
+        }
+      }
       return;
     }
     switch (input.key.toLowerCase()) {
@@ -308,14 +387,34 @@ class Presentation {
     }
   }
 
-  // 演讲者窗口里点图放大：同步到观众窗口
+  // 演讲者窗口里点图放大：同步到观众窗口与访客大屏
   relayLb(msg) {
+    if (!msg || typeof msg !== 'object') return;
+    if (msg.op === 'open') this.lbState = { op: 'open', src: msg.src || '', cap: msg.cap || '', xf: null };
+    else if (msg.op === 'xf' && this.lbState) this.lbState.xf = { s: msg.s, nx: msg.nx, ny: msg.ny };
+    else if (msg.op === 'close') this.lbState = null;
     if (this.audience && !this.audience.isDestroyed()) this.audience.webContents.send('stage:lb-sync', msg);
+    if (this.onLiveEvent) this.onLiveEvent('lb', msg);
   }
 
-  // 稿子里 data-sync 区块的变化：演讲者 → 观众；观众页载入后让演讲者补发当前状态
+  // 稿子里 data-sync 区块的变化：演讲者 → 观众与访客大屏；新页面载入后可恢复最新状态
   relayDom(msg) {
+    if (!msg || typeof msg !== 'object') return;
+    const key = domSyncKey(msg);
+    if (key) {
+      if (!this.domSyncMap) this.domSyncMap = new Map();
+      if (this.domSyncMap.size > 2000 && !this.domSyncMap.has(key)) {
+        this.domSyncMap.delete(this.domSyncMap.keys().next().value);
+      }
+      this.domSyncMap.set(key, msg);
+    }
     if (this.audience && !this.audience.isDestroyed()) this.audience.webContents.send('stage:dom-sync', msg);
+    if (this.onLiveEvent) this.onLiveEvent('dom', msg);
+  }
+
+  // 内嵌网页（iframe）内的点击、滚动、输入与地址跳转：演讲者 → 观众窗口
+  relayIframe(msg) {
+    if (this.audience && !this.audience.isDestroyed()) this.audience.webContents.send('stage:iframe-sync', msg);
   }
 
   requestDomSync() {
@@ -327,14 +426,23 @@ class Presentation {
     else if (this.presenter && !this.presenter.isDestroyed() && wc === this.presenter.webContents) this.lightbox.presenter = !!on;
   }
 
-  // 演讲者窗口的光点 / 划线消息转给观众窗口
+  // 演讲者窗口的光点 / 划线消息转给观众窗口与访客大屏
   relayPointer(msg) {
     if (this.audience && !this.audience.isDestroyed()) this.audience.webContents.send('stage:pointer', msg);
+    if (this.onLiveEvent) this.onLiveEvent('pointer', msg);
   }
 
-  toggleVisitorQr(on, info = null) {
-    if (!this.audience || this.audience.isDestroyed()) return;
-    this.audience.webContents.send('stage:visitor-qr', { on: !!on, qr: info && info.visitorQr, url: info && info.visitorUrl });
+  normalizeVisitorQrMode(modeOrOn) {
+    if (modeOrOn === 'full' || modeOrOn === 'corner' || modeOrOn === 'off') return modeOrOn;
+    return modeOrOn ? 'full' : 'off';
+  }
+
+  toggleVisitorQr(modeOrOn, info = null) {
+    const mode = this.normalizeVisitorQrMode(modeOrOn);
+    this.visitorQrMode = mode;
+    const payload = { mode, on: mode !== 'off', qr: info && info.visitorQr, url: info && info.visitorUrl };
+    if (this.audience && !this.audience.isDestroyed()) this.audience.webContents.send('stage:visitor-qr', payload);
+    if (this.presenter && !this.presenter.isDestroyed()) this.presenter.webContents.send('stage:visitor-qr-state', payload);
   }
 
   toggleRemoteQr(on, info = null) {
@@ -344,7 +452,7 @@ class Presentation {
 
   toggleBlackout() {
     this.blackout = !this.blackout;
-    if (this.audience) this.audience.webContents.send('stage:blackout', this.blackout);
+    if (this.audience && !this.audience.isDestroyed()) this.audience.webContents.send('stage:blackout', this.blackout);
     this.onChange();
   }
 
@@ -359,9 +467,13 @@ class Presentation {
   }
 
   reloadWindows() {
+    this.reloadSeq = (this.reloadSeq || 0) + 1;
+    if (this.domSyncMap) this.domSyncMap.clear();
+    this.lbState = null;
     for (const win of [this.audience, this.presenter]) {
       if (win && !win.isDestroyed()) win.webContents.reloadIgnoringCache();
     }
+    this.onChange();
   }
 
   setHotReload(on) {
@@ -425,10 +537,18 @@ class Presentation {
       const n = await win.webContents.executeJavaScript('window.__cur ? window.__cur() : 0');
       if (n === this.cur) return;
       this.cur = n;
+      this.lbState = null;
+      if (this.onLiveEvent) this.onLiveEvent('pointer', { k: 'c' });
       if (!this.t0 && n > 0) this.t0 = Date.now();
       this.pageAt = Date.now();
       this.onChange();
     } catch (e) { /* 窗口正在关闭 */ }
+  }
+
+  interactionList() {
+    return [...this.interactions.byId.values()].map((x) => ({
+      id: x.id, type: x.type, count: x.count, options: x.options, results: x.results
+    }));
   }
 
   remoteState() {
@@ -436,6 +556,7 @@ class Presentation {
     const next = this.slides[this.cur + 1];
     return {
       live: true,
+      deckId: `${this.startedAt || 0}:${this.reloadSeq || 0}`,
       deck: this.title,
       page: this.cur,
       total: this.slides.length,
@@ -447,7 +568,10 @@ class Presentation {
       now: Date.now(),
       blackout: this.blackout,
       visitors: this.remoteVisitors || 0,
-      interactions: [...this.interactions.byId.values()].map((x) => ({ id: x.id, type: x.type, count: x.count, options: x.options, results: x.results }))
+      pointer: this.getPointer ? this.getPointer() : null,
+      lightbox: this.lbState || null,
+      domSync: this.domSyncMap ? [...this.domSyncMap.values()] : [],
+      interactions: this.interactionList()
     };
   }
 
@@ -465,27 +589,41 @@ class Presentation {
     return true;
   }
 
-  setRemoteStatus({ enabled = false, visitors = 0 } = {}) {
-    this.remoteVisitors = Number(visitors) || 0;
-    this.remoteEnabled = !!enabled;
+  pushPresenterStatus() {
     if (this.presenter && !this.presenter.isDestroyed()) {
-      this.presenter.webContents.send('stage:remote-status', { enabled: this.remoteEnabled, visitors: this.remoteVisitors });
+      this.presenter.webContents.send('stage:remote-status', {
+        enabled: !!this.remoteEnabled,
+        visitors: this.remoteVisitors || 0,
+        remotes: this.remoteRemotes || 0,
+        visitorQrMode: this.visitorQrMode || 'off',
+        interactions: this.interactionList()
+      });
     }
   }
 
-  async remoteInteraction({ id, type, payload, sid }) {
+  setRemoteStatus({ enabled = false, visitors = 0, remotes = 0 } = {}) {
+    this.remoteVisitors = Number(visitors) || 0;
+    this.remoteRemotes = Number(remotes) || 0;
+    this.remoteEnabled = !!enabled;
+    if (!this.remoteEnabled) this.visitorQrMode = 'off';
+    this.pushPresenterStatus();
+  }
+
+  async remoteInteraction({ id, type, payload }) {
     const allowed = new Set(['poll', 'choice', 'question', 'reaction', 'wordcloud', 'scale']);
     if (!allowed.has(type) || !/^[a-zA-Z0-9_.:-]{1,80}$/.test(id)) return { ok: false, error: '互动定义不合法' };
     const now = Date.now();
     this.interactions.recent = this.interactions.recent.filter((t) => t > now - 10000);
     if (this.interactions.recent.length >= 20) return { ok: false, error: '提交太频繁，请稍后再试' };
     this.interactions.recent.push(now);
-    const text = typeof payload === 'string' ? payload.slice(0, 300) : payload;
+    const text = typeof payload === 'string' ? payload.slice(0, 300).trim() : payload;
+    if (text === '' || text == null) return { ok: false, error: '内容不能为空' };
     let item = this.interactions.byId.get(id);
     if (!item) { item = { id, type, count: 0, options: [], results: {} }; this.interactions.byId.set(id, item); }
     item.count += 1;
-    const key = typeof text === 'string' ? text : JSON.stringify(text || '');
+    const key = typeof text === 'string' ? text : JSON.stringify(text);
     item.results[key] = (item.results[key] || 0) + 1;
+    this.pushPresenterStatus();
     this.onChange();
     return { ok: true };
   }

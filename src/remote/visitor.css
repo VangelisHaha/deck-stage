@@ -1,1 +1,292 @@
-:root{--ink:#0F0F0E;--paper:#F1EEE6;--dim:#9A958A;--rule:#2E2D2A;--signal:#FF4F1F;--mint:#3FD9A8;--serif:"Songti SC","STSong",serif;--sans:-apple-system,"PingFang SC",sans-serif;--mono:"SF Mono",ui-monospace,Menlo,monospace}*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--ink);color:var(--paper)}body{font-family:var(--sans)}main{max-width:900px;margin:auto;padding:8vh 24px 48px}.kicker{color:var(--dim);font:12px var(--mono);letter-spacing:2px;display:flex;align-items:center;gap:8px}.dot{width:8px;height:8px;border-radius:50%;background:var(--mint);display:inline-block}#status{margin-top:28px;color:var(--dim);font-size:14px}#page{margin-top:36px;color:var(--signal);font:14px var(--mono)}h1{font:900 clamp(32px,7vw,72px) var(--serif);line-height:1.15;margin:14px 0 28px}article{border-top:1px solid var(--rule);padding-top:24px;font:600 clamp(20px,4vw,36px)/1.7 var(--serif);white-space:pre-wrap}.interaction{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:18px;padding:16px;border:1px solid var(--rule);border-radius:12px;background:rgba(255,255,255,.03)}.interaction span{flex:1 1 100%;color:var(--paper);font-weight:700}.interaction input{min-width:0;flex:1;background:transparent;border:1px solid #555;border-radius:6px;color:var(--paper);padding:11px}.interaction button{background:var(--signal);color:#121212;border:0;border-radius:6px;padding:11px 16px;font-weight:700}.interaction button:disabled{opacity:.55}.conn{position:fixed;inset:0 0 auto;background:var(--signal);color:#121212;padding:10px;text-align:center;z-index:20}.conn button{border:0;background:none;text-decoration:underline;color:#121212}@media (orientation:landscape) and (max-height:600px){main{padding-top:20px}article{font-size:clamp(18px,4vw,30px)}}@media (min-width:760px){main{max-width:1100px}article{font-size:clamp(24px,3vw,42px)}}
+:root {
+  --ink: #0F0F0E;
+  --paper: #F1EEE6;
+  --dim: #9A958A;
+  --rule: #2E2D2A;
+  --signal: #FF4F1F;
+  --mint: #3FD9A8;
+  --serif: "Songti SC", "STSong", "Noto Serif CJK SC", serif;
+  --sans: -apple-system, "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  --mono: "SF Mono", ui-monospace, Menlo, monospace;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  color: var(--paper);
+  font-family: var(--sans);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.mono { font-family: var(--mono); }
+
+/* 等待放映 / 失效提示 */
+.idle-screen {
+  min-height: 100%;
+  padding: calc(env(safe-area-inset-top) + 64px) 28px 40px;
+  background: var(--ink);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-width: 720px;
+  margin: 0 auto;
+}
+.kicker {
+  color: var(--dim);
+  font: 12px var(--mono);
+  letter-spacing: 2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mint);
+  display: inline-block;
+}
+.idle-screen h1 {
+  font: 900 clamp(34px, 7vw, 58px)/1.15 var(--serif);
+  margin: 22px 0 14px;
+}
+.sub {
+  margin: 0;
+  color: var(--dim);
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+/* 放映大屏容器：手机竖屏锁定时默认旋转 90° 铺满全屏，已横屏或电脑访问时保持 0° */
+#liveShell {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  width: 100dvw;
+  height: 100dvh;
+  background: #000;
+  overflow: hidden;
+}
+#liveShell.rot90 {
+  inset: auto;
+  left: 50%;
+  top: 50%;
+  width: 100vh;
+  height: 100vw;
+  width: 100dvh;
+  height: 100dvw;
+  transform: translate(-50%, -50%) rotate(90deg);
+  transform-origin: center center;
+}
+
+#stageFrame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: #000;
+}
+
+.blackout {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  z-index: 20;
+}
+
+/* 右上角悬浮状态与控制胶囊：无操作自动淡出，轻触屏幕唤起 */
+.hud {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(15, 15, 14, 0.82);
+  border: 1px solid rgba(241, 238, 230, 0.2);
+  backdrop-filter: blur(8px);
+  font-size: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease;
+}
+.hud.on {
+  opacity: 1;
+  pointer-events: auto;
+}
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mint);
+  flex-shrink: 0;
+}
+#pageBadge {
+  color: var(--paper);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  padding-right: 2px;
+}
+.hud-btn {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(241, 238, 230, 0.28);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--paper);
+  font: 11px var(--sans);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.hud-btn.hot {
+  background: var(--signal);
+  border-color: var(--signal);
+  color: #121212;
+  font-weight: 700;
+}
+
+/* 现场互动抽屉 */
+.ix-sheet {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  width: min(420px, calc(100% - 28px));
+  max-height: calc(100% - 64px);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: rgba(15, 15, 14, 0.95);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(12px);
+  overflow: hidden;
+}
+.ix-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+}
+.ix-close {
+  border: 0;
+  background: none;
+  color: var(--paper);
+  font: 12px var(--sans);
+  cursor: pointer;
+}
+.ix-body {
+  padding: 12px 14px 14px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.interaction {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.interaction + .interaction {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
+}
+.ix-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--paper);
+}
+.ix-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.ix-opt {
+  padding: 7px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(241, 238, 230, 0.25);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--paper);
+  font-size: 13px;
+  cursor: pointer;
+}
+.ix-opt.sel {
+  border-color: var(--signal);
+  background: rgba(255, 79, 31, 0.2);
+  color: #fff;
+}
+.ix-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.ix-form input {
+  min-width: 0;
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid #4A4842;
+  border-radius: 6px;
+  color: var(--paper);
+  padding: 9px 11px;
+  font-size: 14px;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.ix-form input[type="range"] {
+  padding: 0;
+  accent-color: var(--signal);
+}
+.ix-scale-val {
+  font: 700 14px var(--mono);
+  color: var(--signal);
+  min-width: 24px;
+  text-align: center;
+}
+.ix-submit {
+  background: var(--signal);
+  color: #121212;
+  border: 0;
+  border-radius: 6px;
+  padding: 9px 14px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ix-submit:disabled { opacity: 0.55; cursor: default; }
+
+/* 断线重连横幅 */
+.conn {
+  position: fixed;
+  inset: 0 0 auto;
+  background: var(--signal);
+  color: #121212;
+  padding: calc(env(safe-area-inset-top) + 8px) 14px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  z-index: 60;
+}
+.conn button {
+  margin-left: 8px;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-decoration: underline;
+  color: #121212;
+  cursor: pointer;
+}

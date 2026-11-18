@@ -47,3 +47,58 @@ test('文件变更监听过滤 Windows 和 POSIX 依赖目录，内容修改仍�
   onChange('change', 'notes.js');
   assert.equal(scheduled, 2);
 });
+
+test('输入框聚焦期间屏蔽 F / D / B / P 快捷键，按 Esc 仅让输入框失焦', () => {
+  const p = session('darwin');
+  const sent = [];
+  let toggledFs = 0;
+  let blacked = 0;
+  const presenterWc = { send: (ch, data) => sent.push([ch, data]) };
+  p.presenter = { isDestroyed: () => false, webContents: presenterWc };
+  p.audience = { isDestroyed: () => false, webContents: { send() {} } };
+  p.target = { mode: 'screen', displayId: 1 };
+  p.lightbox = { audience: false, presenter: false };
+  p.toggleFullscreen = () => { toggledFs += 1; };
+  p.toggleBlackout = () => { blacked += 1; };
+
+  p.setTyping(presenterWc, true);
+  for (const key of ['f', 'd', 'b', 'p']) {
+    let prevented = false;
+    p.onKey({ preventDefault: () => { prevented = true; } }, { type: 'keyDown', key }, 'presenter');
+    assert.equal(prevented, false, key);
+  }
+  assert.equal(toggledFs, 0);
+  assert.equal(blacked, 0);
+
+  let escPrevented = false;
+  p.onKey({ preventDefault: () => { escPrevented = true; } }, { type: 'keyDown', key: 'Escape' }, 'presenter');
+  assert.equal(escPrevented, true);
+  assert.deepEqual(sent, [['stage:blur-editable', undefined]]);
+
+  p.setTyping(presenterWc, false);
+  p.onKey({ preventDefault() {} }, { type: 'keyDown', key: 'b' }, 'presenter');
+  assert.equal(blacked, 1);
+});
+
+test('访客二维码三态切换与大屏状态实时转发', () => {
+  const p = session('darwin');
+  const audienceMsgs = [];
+  const presenterMsgs = [];
+  const liveEvents = [];
+  p.audience = { isDestroyed: () => false, webContents: { send: (ch, d) => audienceMsgs.push([ch, d]) } };
+  p.presenter = { isDestroyed: () => false, webContents: { send: (ch, d) => presenterMsgs.push([ch, d]) } };
+  p.onLiveEvent = (ev, d) => liveEvents.push([ev, d]);
+
+  p.toggleVisitorQr('corner', { visitorQr: 'qr-svg', visitorUrl: 'http://192.168.1.2:18899/?v=1' });
+  assert.equal(p.visitorQrMode, 'corner');
+  assert.equal(audienceMsgs[0][0], 'stage:visitor-qr');
+  assert.equal(audienceMsgs[0][1].mode, 'corner');
+  assert.equal(presenterMsgs[0][0], 'stage:visitor-qr-state');
+
+  p.relayDom({ zi: 0, path: [1], op: 'attr', name: 'class', value: 'is-active' });
+  p.relayIframe({ fi: 0, op: 'click', path: [0], rx: 0.5, ry: 0.5 });
+  assert.equal(p.domSyncMap.size, 1);
+  assert.equal(liveEvents.length, 1);
+  assert.equal(liveEvents[0][0], 'dom');
+  assert.equal(audienceMsgs.some(([ch]) => ch === 'stage:iframe-sync'), true);
+});

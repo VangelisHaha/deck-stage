@@ -146,36 +146,38 @@
   <div class="sheet">
     <div class="sheet-head">
       <div>
-        <h2>手机遥控</h2>
-        <p class="muted">手机和电脑连同一个 Wi-Fi，浏览器扫码就能翻页、看台词，不用装 App。</p>
+        <h2>手机遥控与访客同屏</h2>
+        <p class="muted">连同一个 Wi-Fi，讲者扫码可翻页看台词；听众扫「访客同屏」可在手机/电脑同步看横屏大屏（放映中按 R / V 也可随时调出）。</p>
       </div>
       <button id="closeRemote" class="link-ink">关闭 Esc</button>
     </div>
     <div class="remote-body">
       <div class="qr-col">
-        <div id="qrBox" class="qr-box"><img id="qr" alt="手机遥控二维码"></div>
-        <div class="mono muted tiny">手机遥控 · SCAN</div>
-        <div id="visitorQrBox" class="qr-box" hidden><img id="visitorQr" alt="访客视图二维码"></div>
-        <div id="visitorQrLabel" class="mono muted tiny" hidden>访客视图 · SCAN</div>
+        <div class="qr-tabs" role="tablist">
+          <button id="qrTabRemote" class="qr-tab on" type="button">讲者遥控</button>
+          <button id="qrTabVisitor" class="qr-tab" type="button">访客同屏</button>
+        </div>
+        <div id="qrBox" class="qr-box"><img id="qr" alt="连接二维码"></div>
+        <div id="qrCaption" class="mono muted tiny">讲者扫码 · 翻页与看台词</div>
       </div>
       <div class="info-col">
         <div class="row-head">
-          <div><div class="strong">允许手机遥控</div><div class="muted small">每次开启重新生成配对码</div></div>
+          <div><div class="strong">允许局域网连接</div><div class="muted small">每次开启重新生成令牌与配对码</div></div>
           <button id="remoteToggle" class="switch" aria-label="开关手机遥控"></button>
         </div>
         <div id="remoteOn">
           <section>
-            <span class="label ink">PAIRING CODE</span>
+            <span class="label ink">PAIRING CODE · 遥控配对码</span>
             <div id="pairCode" class="code"></div>
-            <div class="row-head"><span id="remoteUrl" class="mono muted tiny"></span><button id="copyUrl" class="link-ink">复制地址</button></div>
-            <div id="visitorUrl" class="mono muted tiny" hidden></div>
+            <div class="url-row"><span id="remoteUrl" class="mono muted url-text"></span><button id="copyUrl" class="link-ink">复制遥控地址</button></div>
+            <div id="visitorRow" class="url-row" hidden><span id="visitorUrl" class="mono muted url-text"></span><button id="copyVisitorUrl" class="link-ink">复制访客链接</button></div>
           </section>
           <section>
             <div class="row-head"><span class="label ink">已连接设备</span><button id="resetPair" class="link-ink">重置配对</button></div>
             <div id="devices"></div>
           </section>
         </div>
-        <p id="remoteOff" class="muted small">关闭状态下，手机无法访问电脑。</p>
+        <p id="remoteOff" class="muted small">关闭状态下，局域网设备无法访问电脑；放映时按 R 或 V 会自动开启。</p>
       </div>
     </div>
     <p class="muted small">局域网内是明文 HTTP，只在可信的 Wi-Fi 下使用。</p>

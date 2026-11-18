@@ -86,4 +86,4 @@ function startServer(root, preferredPort) {
   });
 }
 
-module.exports = { startServer, serveFile, send };
+module.exports = { startServer, makeHandler, serveFile, send };

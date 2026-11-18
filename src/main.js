@@ -48,6 +48,7 @@ const previews = new Previews({
 const remote = new RemoteServer({
   onCommand: (cmd) => (presentation ? presentation.remoteCommand(cmd) : false),
   onInteraction: (event) => (presentation ? presentation.remoteInteraction(event) : { ok: false, error: '当前没有放映' }),
+  getDeckRoot: () => (presentation ? presentation.root : null),
   onChange: () => { pushState(); if (presentation) presentation.setRemoteStatus(remote.summary()); remoteBroadcast(); }
 });
 
@@ -259,6 +260,8 @@ async function startPresentation(dir, layoutTargets = null) {
   presentation = new Presentation(root, {
     confirmServices,
     resync: own ? () => remoteDecks.sync(root) : null,
+    getPointer: () => ({ value: store.read().pointer, ...pointerCatalog() }),
+    onLiveEvent: (ev, data) => { if (remote.enabled) remote.broadcastEvent(ev, data, 'visitor'); },
     onChange: () => { rebuildMenu(); pushState(); remoteBroadcast(); },
     onEnd: () => {
       presentation = null;
@@ -401,10 +404,11 @@ const fromPresenter = (e) => presentation && presentation.presenter && !presenta
 ipcMain.on('stage:pointer', (e, msg) => {
   if (fromPresenter(e)) presentation.relayPointer(msg);
 });
-// 演讲者窗口里正在搜索框打字：放映快捷键（F/D/B/P）先让位
-ipcMain.on('stage:typing', (e, on) => { if (fromPresenter(e)) presentation.typing = !!on; });
+// 放映窗口里输入框或目录搜索框正在输入：单键放映快捷键（F/D/B/P）先让位
+ipcMain.on('stage:typing', (e, on) => { if (presentation) presentation.setTyping(e.sender, on); });
 ipcMain.on('stage:lb-sync', (e, msg) => { if (fromPresenter(e) && msg && typeof msg === 'object') presentation.relayLb(msg); });
 ipcMain.on('stage:dom-sync', (e, msg) => { if (fromPresenter(e) && msg && typeof msg === 'object') presentation.relayDom(msg); });
+ipcMain.on('stage:iframe-sync', (e, msg) => { if (fromPresenter(e) && msg && typeof msg === 'object') presentation.relayIframe(msg); });
 ipcMain.on('stage:dom-sync-ready', (e) => { if (presentation && presentation.audience && !presentation.audience.isDestroyed() && e.sender === presentation.audience.webContents) presentation.requestDomSync(); });
 ipcMain.on('stage:lightbox', (e, on) => { if (presentation) presentation.setLightbox(e.sender, on); });
 ipcMain.on('stage:overlay', (e, on) => { if (fromPresenter(e)) presentation.overlay = !!on; });
@@ -422,6 +426,7 @@ ipcMain.handle('stage:pointer-set', (_e, prefs) => {
   const clean = normalizePointer(prefs);
   store.update((c) => { c.pointer = clean; });
   pushState();
+  remoteBroadcast();
   return clean;
 });
 ipcMain.handle('stage:play-targets', () => {
@@ -456,19 +461,31 @@ ipcMain.handle('stage:reveal', (_e, dir) => {
   shell.showItemInFolder(dir);
 });
 ipcMain.handle('stage:reveal-skill', () => shell.showItemInFolder(skill.skillDir()));
+async function ensureRemoteStarted() {
+  if (remote.enabled) return;
+  await remote.start();
+  if (presentation) presentation.setRemoteStatus(remote.summary());
+  remoteBroadcast();
+  pushState();
+}
+
 ipcMain.handle('stage:remote-get', () => remote.info());
 ipcMain.handle('stage:remote-toggle', async (_e, on) => {
   if (on) { await remote.start(); remoteBroadcast(); } else await remote.stop();
+  if (presentation) presentation.setRemoteStatus(remote.summary());
   pushState();
 });
 ipcMain.handle('stage:remote-reset', () => remote.reset());
 ipcMain.handle('stage:remote-kick', (_e, sid) => remote.kick(sid));
-ipcMain.on('stage:visitor-qr', async (e, on) => {
-  if (!presentation || !presentation.presenter || e.sender !== presentation.presenter.webContents) return;
-  presentation.toggleVisitorQr(on, on ? await remote.info() : null);
+ipcMain.on('stage:visitor-qr', async (e, modeOrOn) => {
+  if (!fromPresenter(e)) return;
+  const mode = presentation.normalizeVisitorQrMode(modeOrOn);
+  if (mode !== 'off') await ensureRemoteStarted();
+  presentation.toggleVisitorQr(mode, mode !== 'off' ? await remote.info() : null);
 });
 ipcMain.on('stage:remote-qr', async (e, on) => {
-  if (!presentation || !presentation.presenter || e.sender !== presentation.presenter.webContents) return;
+  if (!fromPresenter(e)) return;
+  if (on) await ensureRemoteStarted();
   presentation.toggleRemoteQr(on, on ? await remote.info() : null);
 });
 // 演讲者窗口载入后主动要一次遥控状态（放映开始时窗口还没加载完，onChange 推的那次会丢）

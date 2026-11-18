@@ -35,7 +35,9 @@ var PPTX = CFG.pptx || {};
 var RAIL = CFG.rail || null;
 var root = document.documentElement;
 var PV = /[?&]notes\b/.test(location.search);
+var VISITOR = /[?&]visitor\b/.test(location.search);
 if(PV) root.classList.add('pv');
+if(VISITOR) root.classList.add('visitor');
 /* 同一个 App 里每份稿子各有自己的端口（不同源），频道名只需在单个来源里唯一 */
 var CHANNEL = CFG.channel || ('deck:' + location.pathname);
 /* 内核自己的地址：导出库从同一个目录加载 */
@@ -190,6 +192,7 @@ window.__slides = slides;
 window.__cur = function(){ return cur; };
 
 document.addEventListener('keydown', function(e){
+  if(VISITOR) return;
   if(e.metaKey || e.ctrlKey || e.altKey) return;
   switch(e.key){
     case 'ArrowRight': case 'ArrowDown': case 'PageDown': case ' ': case 'Enter':
@@ -206,7 +209,7 @@ document.addEventListener('keydown', function(e){
 });
 
 document.addEventListener('click', function(e){
-  if(PV) return;                         /* 演讲者视图靠按钮和键盘 */
+  if(PV || VISITOR) return;              /* 演讲者视图靠按钮和键盘；访客大屏跟随演讲者 */
   if(window.__lbOpen) return;            /* 灯箱开着不翻页 */
   if(e.target.closest('#dots') || e.target.closest('#lb')) return;
   /* 点图是放大，不是翻页 */
@@ -426,7 +429,7 @@ window.__assetsReady = (function(){
 
   /* 事件委托，后补的图也生效 */
   document.addEventListener('click', function(e){
-    if(window.__lbOpen) return;
+    if(window.__lbOpen || (VISITOR && e.isTrusted)) return;
     var t = e.target.closest('#slides .imgslot.has img, #slides [data-avatar] img');
     if(!t) return;
     e.preventDefault();
@@ -443,10 +446,12 @@ window.__assetsReady = (function(){
     if(a === 'close') close();
   });
   lbEl.addEventListener('click', function(e){
+    if(VISITOR && e.isTrusted) return;
     if(e.target === img || e.target.closest('.bar')) return;
     close();
   });
   lbEl.addEventListener('wheel', function(e){
+    if(VISITOR && e.isTrusted) return;
     e.preventDefault();
     zoomAt(s * (e.deltaY < 0 ? 1.13 : 1/1.13), e.clientX, e.clientY);
   }, { passive:false });
@@ -703,7 +708,7 @@ new MutationObserver(function(){
 fit();
 var m = /^#p(\d+)$/.exec(location.hash);
 go(m ? Math.max(0, Math.min(parseInt(m[1],10)-1, slides.length-1)) : 0, true);
-send({ t:'hello' });
+if(!VISITOR) send({ t:'hello' });
 document.addEventListener('DOMContentLoaded', function(){ booted = true; enter(slides[cur], cur, false); });
 
 })();

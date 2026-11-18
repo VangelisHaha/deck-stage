@@ -1,4 +1,45 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DeckStage 访客视图</title><link rel="stylesheet" href="/visitor.css"></head><body>
-<main><div class="kicker"><span class="dot"></span>DECKSTAGE · VISITOR</div><div id="status">等待放映…</div><div id="page"></div><h1 id="title"></h1><article id="notes"></article><section id="interactions"></section><div id="conn" hidden>连接中断，正在重连… <button id="retry" type="button">重试</button></div></main>
-<script src="/visitor.js"></script></body></html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>DeckStage · 同屏观看</title>
+<link rel="stylesheet" href="/visitor.css">
+</head>
+<body>
+
+<section id="idle" class="idle-screen">
+  <div class="kicker"><span class="dot"></span>DECKSTAGE · VISITOR</div>
+  <h1 id="idleTitle">等待放映…</h1>
+  <p id="idleSub" class="sub">已连上放映台。演讲开始后会自动切换为横屏大屏同步画面。</p>
+</section>
+
+<section id="liveShell" hidden>
+  <iframe id="stageFrame" title="演示大屏" allow="autoplay"></iframe>
+  <div id="blackout" class="blackout" hidden></div>
+
+  <div id="hud" class="hud on">
+    <span class="live-dot" aria-hidden="true"></span>
+    <span id="pageBadge" class="mono">01 / 01</span>
+    <button id="btnIx" class="hud-btn hot" type="button" hidden>参与互动</button>
+    <button id="btnOrient" class="hud-btn" type="button" hidden>竖屏</button>
+    <button id="btnFull" class="hud-btn" type="button" hidden>全屏</button>
+  </div>
+
+  <aside id="ixSheet" class="ix-sheet" role="dialog" aria-label="现场互动" hidden>
+    <div class="ix-head">
+      <span class="mono">INTERACTION · 现场互动</span>
+      <button id="ixClose" class="ix-close" type="button">收起 ✕</button>
+    </div>
+    <div id="interactions" class="ix-body"></div>
+  </aside>
+</section>
+
+<div id="conn" class="conn" hidden>连接中断，正在重连… <button id="retry" type="button">立即重试</button></div>
+
+<script src="/_deckstage/stage-sync.js"></script>
+<script src="/visitor.js"></script>
+</body>
+</html>

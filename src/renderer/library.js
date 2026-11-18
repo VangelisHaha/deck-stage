@@ -8,6 +8,7 @@
   let query = '';
   let selected = null;
   let remoteInfo = { enabled: false, devices: [] };
+  let qrRole = 'remote'; // 'remote' | 'visitor'
   let playPointer = null;
   let pointerExpanded = false; // 放映前光标列表：默认一行，点「展开全部」看全部
   let previewOn = true;
@@ -328,34 +329,41 @@
   function renderRemoteBtn() {
     const r = state.remote;
     $('openRemote').className = 'remote-btn' + (r.enabled ? ' on' : '');
-    $('remoteText').textContent = r.enabled ? `手机遥控 · 开${r.online ? ' · ' + r.online + ' 台' : ''}` : '手机遥控 · 关';
+    const parts = [];
+    if (r.remotes) parts.push(`遥控 ${r.remotes}`);
+    if (r.visitors) parts.push(`访客 ${r.visitors}`);
+    $('remoteText').textContent = r.enabled ? `手机遥控 · 开${parts.length ? ' · ' + parts.join(' / ') : ''}` : '手机遥控 · 关';
   }
 
   function renderRemote() {
     const on = remoteInfo.enabled;
     $('remoteToggle').className = 'switch' + (on ? ' on' : '');
     $('qrBox').className = 'qr-box' + (on ? '' : ' off');
+    $('qrTabRemote').classList.toggle('on', qrRole === 'remote');
+    $('qrTabVisitor').classList.toggle('on', qrRole === 'visitor');
+    $('qrTabRemote').disabled = !on;
+    $('qrTabVisitor').disabled = !on;
+    $('qrCaption').textContent = qrRole === 'visitor' ? '听众扫码 · 横屏同步看大屏' : '讲者扫码 · 翻页与看台词';
     $('remoteOn').hidden = !on;
     $('remoteOff').hidden = on;
     if (!on) { $('qr').removeAttribute('src'); return; }
-    $('qr').src = remoteInfo.qr;
-    $('visitorQr').src = remoteInfo.visitorQr || '';
-    $('visitorQrBox').hidden = !remoteInfo.visitorQr;
-    $('visitorQrLabel').hidden = !remoteInfo.visitorQr;
-    $('visitorUrl').hidden = !remoteInfo.visitorUrl;
-    $('visitorUrl').textContent = remoteInfo.visitorUrl ? '访客地址：' + remoteInfo.visitorUrl : '';
+    $('qr').src = qrRole === 'visitor' ? (remoteInfo.visitorQr || remoteInfo.qr) : remoteInfo.qr;
+    $('visitorRow').hidden = !remoteInfo.visitorUrl;
+    $('visitorUrl').textContent = remoteInfo.visitorUrl ? '访客：' + remoteInfo.visitorUrl : '';
     $('pairCode').textContent = remoteInfo.code.replace(/^(\d{3})(\d{3})$/, '$1 $2');
-    $('remoteUrl').textContent = remoteInfo.base;
+    $('remoteUrl').textContent = '遥控：' + remoteInfo.base;
     const box = $('devices');
     box.textContent = '';
     if (!remoteInfo.devices.length) {
-      const empty = el('div', 'muted small', '还没有手机连接。');
+      const empty = el('div', 'muted small', '还没有设备连接。');
       empty.style.marginTop = '10px';
       box.appendChild(empty);
     }
     for (const d of remoteInfo.devices) {
       const row = el('div', 'device');
       row.appendChild(el('span', 'sq' + (d.online ? '' : ' off')));
+      const role = d.role === 'visitor' ? 'visitor' : 'remote';
+      row.appendChild(el('span', 'role-tag ' + role, role === 'visitor' ? '访客' : '遥控'));
       row.appendChild(el('span', 'grow', d.label));
       row.appendChild(el('span', 'mono', d.ip));
       const kick = el('button', 'link-ink', '断开');
@@ -477,9 +485,12 @@
   $('openRemote').onclick = () => showRemote(true);
   $('closeRemote').onclick = () => showRemote(false);
   $('remote').addEventListener('click', (e) => { if (e.target === $('remote')) showRemote(false); });
+  $('qrTabRemote').onclick = () => { qrRole = 'remote'; renderRemote(); };
+  $('qrTabVisitor').onclick = () => { qrRole = 'visitor'; renderRemote(); };
   $('remoteToggle').onclick = async () => { await window.stage.remoteToggle(!remoteInfo.enabled); await refreshRemote(); };
   $('resetPair').onclick = async () => { await window.stage.remoteReset(); await refreshRemote(); };
   $('copyUrl').onclick = async (e) => { await window.stage.copy(remoteInfo.base); flash(e.target, '已复制'); };
+  $('copyVisitorUrl').onclick = async (e) => { if (remoteInfo.visitorUrl) { await window.stage.copy(remoteInfo.visitorUrl); flash(e.target, '已复制'); } };
   $('skills').addEventListener('click', (e) => { if (e.target === $('skills')) showSkills(false); });
   $('revealSkill').onclick = () => window.stage.revealSkill();
   $('copyPath').onclick = async (e) => { await window.stage.copy(state.skills.dir); flash(e.target, '已复制'); };

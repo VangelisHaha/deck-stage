@@ -198,7 +198,7 @@ body:not(.exporting) .slide[data-t].on [data-type] .ch:not(.in){opacity:0;}
    内核自带一个基础布局：顶栏（页码 / 标题 / 计时 / 翻页）→ 当前页 + 台词。
    在 DeckStage 里放映时，App 会换成更完整的布局（目录、光点、上下页预览）。
    ============================================================ */
-.pv #dots{display:none !important;}
+.pv #dots,.visitor #dots,.visitor #toast,.visitor #lb .bar,.visitor #lb .hint{display:none !important;}
 .pv .bokeh{animation:none !important;}
 .pv #stage{position:absolute;left:0;top:0;transform-origin:0 0;}
 #pv{display:none;}
